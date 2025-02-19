@@ -6,7 +6,7 @@ import axios from 'axios';
 
 @Injectable()
 export class EntregadoresService {
-    private readonly googleMapsApiKey = 'SUA_API_KEY';
+    private readonly googleMapsApiKey = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAsfBKGYP5fEfpFvz-ymeXiCoGRvqbsn-M&loading';
 
     constructor(
         @InjectModel(Entregador.name) private entregadorModel: Model<Entregador>,

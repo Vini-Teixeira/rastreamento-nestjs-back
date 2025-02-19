@@ -14,7 +14,7 @@ export class EntregasService {
 
     async criarEntrega(entregaDto: CriarEntregaDto): Promise<Entrega> {
         const entregadores = await this.entregadoresService.findAll();
-        const entregador = entregadores[0]; // Implementar lógica de proximidade no futuro
+        const entregador = entregadores[0];
 
         if (!entregador) {
             throw new NotFoundException('Nenhum entregador disponível');
@@ -22,7 +22,7 @@ export class EntregasService {
 
         const novaEntrega = new this.entregaModel({
             ...entregaDto,
-            entregadorId: entregador._id, // Corrigido para _id
+            entregadorId: entregador._id,
             status: 'pendente',
         });
 
