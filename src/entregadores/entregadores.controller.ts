@@ -1,14 +1,32 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, NotFoundException, HttpStatus, HttpException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, NotFoundException, 
+  HttpStatus, HttpException, UseGuards, ValidationPipe } from '@nestjs/common';
 import { EntregadoresService } from './entregadores.service';
-import { CriarEntregaDto } from '../entregas/dto/criar-entrega.dto';
+import { FirebaseAuthGuard } from 'src/auth/firebase-auth/firebase-auth.guard';
+import { CreateEntregadorDto } from './dto/create-entregador.dto';
+import { UpdateEntregadorDto } from './dto/update-entregador.dto';
 
+@UseGuards(FirebaseAuthGuard)
 @Controller('entregadores')
 export class EntregadoresController {
   constructor(private readonly entregadoresService: EntregadoresService) {}
 
+  @Get('localizacao/:telefone')
+  async buscarLocalizacaoPorTelefone(@Param('telefone') telefone: string) {
+    try {
+      const localizacao = await this.entregadoresService.buscarLocalizacaoPorTelefone(telefone);
+      if (!localizacao) {
+        throw new NotFoundException('Localização não encontrada!');
+      }
+      return localizacao;
+    } catch (error) {
+      console.error('Erro ao buscar localização:', error);
+      throw new HttpException('Falha ao buscar localização', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Post()
-  async create(@Body() data: any) {
-    return this.entregadoresService.create(data);
+  async create(@Body(new ValidationPipe()) createEntregadorDto: CreateEntregadorDto) {
+    return this.entregadoresService.create(createEntregadorDto);
   }
 
   @Get()
@@ -22,37 +40,12 @@ export class EntregadoresController {
   }
 
   @Put(':id')
-  async update(@Param('id') id: string, @Body() data: any) {
-    return this.entregadoresService.update(id, data);
+  async update(@Param('id') id: string, @Body(new ValidationPipe()) updateEntregadorDto: UpdateEntregadorDto) {
+    return this.entregadoresService.update(id, updateEntregadorDto);
   }
 
   @Delete(':id')
   async delete(@Param('id') id: string) {
     return this.entregadoresService.delete(id);
-  }
-
-  @Post('criar')
-  async criarEntrega(@Body() entregaDto: CriarEntregaDto) {
-    try {
-      const entregadores = await this.entregadoresService.findAll();
-      const entregador =
-        await this.entregadoresService.encontrarEntregadorMaisProximo(
-          entregaDto.lat,
-          entregaDto.lng,
-          entregadores,
-        );
-
-      if (!entregador) {
-        throw new NotFoundException('Nenhum entregador disponível');
-      }
-
-      return { entregador, message: 'Entrega criada com sucesso!' };
-    } catch (error) {
-      console.error('Erro ao criar entrega:', error);
-      throw new HttpException(
-        'Falha ao criar entrega',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
   }
 }
