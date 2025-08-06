@@ -14,9 +14,8 @@ const common_1 = require("@nestjs/common");
 const passport_1 = require("@nestjs/passport");
 const passport_jwt_1 = require("passport-jwt");
 const config_1 = require("@nestjs/config");
-const entregadores_service_1 = require("../entregadores/entregadores.service");
 let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy) {
-    constructor(configService, entregadoresService) {
+    constructor(configService) {
         const jwtSecret = configService.get('JWT_SECRET');
         if (!jwtSecret) {
             throw new Error('A variável de ambiente JWT_SECRET não está definida.');
@@ -24,27 +23,17 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
         super({
             jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
-            secretOrKey: jwtSecret,
+            secretOrKey: jwtSecret
         });
         this.configService = configService;
-        this.entregadoresService = entregadoresService;
     }
     async validate(payload) {
-        const entregador = await this.entregadoresService.findOne(payload.sub);
-        if (!entregador) {
-            throw new common_1.UnauthorizedException('Entregador não encontrado.');
-        }
-        if (!entregador.ativo) {
-            throw new common_1.UnauthorizedException('Entregador está inativo.');
-        }
-        const { password, ...result } = entregador.toObject();
-        return result;
+        return { sub: payload.sub, telefone: payload.telefone };
     }
 };
 exports.JwtStrategy = JwtStrategy;
 exports.JwtStrategy = JwtStrategy = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [config_1.ConfigService,
-        entregadores_service_1.EntregadoresService])
+    __metadata("design:paramtypes", [config_1.ConfigService])
 ], JwtStrategy);
 //# sourceMappingURL=jwt.strategy.js.map

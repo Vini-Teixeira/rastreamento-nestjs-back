@@ -17,18 +17,18 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const entregador_schema_1 = require("./schemas/entregador.schema");
-const axios_1 = require("axios");
-const config_1 = require("@nestjs/config");
+const bcrypt = require("bcrypt");
 let EntregadoresService = class EntregadoresService {
-    constructor(entregadorModel, configService) {
+    constructor(entregadorModel) {
         this.entregadorModel = entregadorModel;
-        this.configService = configService;
-        this.distanceMatrixApiUrl = 'https://maps.googleapis.com/maps/api/distancematrix/json';
-        const apiKey = this.configService.get('Maps_API_KEY');
-        if (!apiKey) {
-            throw new Error('Maps_API_KEY não configurada para EntregadoresService.');
+    }
+    async validatePassword(telefone, pass) {
+        const driver = await this.entregadorModel.findOne({ telefone }).select('+password').exec();
+        if (driver && await bcrypt.compare(pass, driver.password)) {
+            const { password, ...result } = driver.toObject();
+            return result;
         }
-        this.googleMapsApiKey = apiKey;
+        return null;
     }
     async create(createEntregadorDto) {
         const newEntregador = new this.entregadorModel(createEntregadorDto);
@@ -49,72 +49,23 @@ let EntregadoresService = class EntregadoresService {
     async delete(id) {
         return this.entregadorModel.findByIdAndDelete(id).exec();
     }
-    async encontrarEntregadorMaisProximo(latDestino, lngDestino, entregadores) {
-        let entregadorMaisProximo = null;
-        let menorDistancia = Infinity;
-        for (const entregador of entregadores) {
-            if (!entregador.localizacao || entregador.localizacao.lat == null || entregador.localizacao.lng == null) {
-                console.warn(`Entregador ${entregador.nome} (${entregador._id}) não tem localização válida. Pulando.`);
-                continue;
-            }
-            const url = `${this.distanceMatrixApiUrl}?origins=${entregador.localizacao.lat},${entregador.localizacao.lng}&destinations=${latDestino},${lngDestino}&mode=driving&key=${this.googleMapsApiKey}`;
-            try {
-                const resposta = await axios_1.default.get(url);
-                if (resposta.data.status === 'OK' &&
-                    resposta.data.rows &&
-                    resposta.data.rows[0] &&
-                    resposta.data.rows[0].elements &&
-                    resposta.data.rows[0].elements[0] &&
-                    resposta.data.rows[0].elements[0].distance) {
-                    const distancia = resposta.data.rows[0].elements[0].distance.value;
-                    if (distancia < menorDistancia) {
-                        menorDistancia = distancia;
-                        entregadorMaisProximo = entregador;
-                    }
-                }
-                else {
-                    console.error('Resposta inválida da Distance Matrix API:', resposta.data);
-                }
-            }
-            catch (error) {
-                console.error('Erro ao chamar Distance Matrix API para entregador:', entregador.nome, error.message);
-            }
-        }
-        return entregadorMaisProximo;
-    }
-    async atualizarLocalizacao(id, lat, lng) {
-        try {
-            const updatedEntregador = await this.entregadorModel.findByIdAndUpdate(id.toString(), { localizacao: { lat, lng } }, { new: true }).exec();
-            if (!updatedEntregador) {
-                throw new common_1.NotFoundException('Entregador não encontrado para atualização de localização.');
-            }
-            return updatedEntregador;
-        }
-        catch (error) {
-            console.error('Erro ao atualizar localização:', error);
-            throw error;
-        }
-    }
-    async buscarLocalizacaoPorTelefone(telefone) {
-        const entregador = await this.entregadorModel.findOne({ telefone }).exec();
-        if (!entregador) {
-            return null;
-        }
-        if (!entregador.localizacao || entregador.localizacao.lat == null || entregador.localizacao.lng == null) {
-            console.warn(`Localização do entregador ${entregador.nome} (${entregador._id}) não é válida.`);
-            return null;
-        }
-        return {
-            lat: entregador.localizacao.lat,
-            lng: entregador.localizacao.lng,
+    async updateLocation(driverId, updateLocationDto) {
+        const { lat, lng } = updateLocationDto;
+        const geoJsonPoint = {
+            type: 'Point',
+            coordinates: [lng, lat],
         };
+        const updatedDriver = await this.entregadorModel.findByIdAndUpdate(driverId, { $set: { localizacao: geoJsonPoint } }, { new: true }).exec();
+        if (!updatedDriver) {
+            throw new common_1.NotFoundException(`Entregador com ID ${driverId} não encontrado.`);
+        }
+        return updatedDriver;
     }
 };
 exports.EntregadoresService = EntregadoresService;
 exports.EntregadoresService = EntregadoresService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(entregador_schema_1.Entregador.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model,
-        config_1.ConfigService])
+    __metadata("design:paramtypes", [mongoose_2.Model])
 ], EntregadoresService);
 //# sourceMappingURL=entregadores.service.js.map

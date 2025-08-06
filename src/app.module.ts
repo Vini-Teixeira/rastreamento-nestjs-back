@@ -4,27 +4,35 @@ import { AppService } from './app.service';
 import { EntregadoresModule } from './entregadores/entregadores.module';
 import { EntregasModule } from './entregas/entregas.module';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config'; 
 import { GoogleMapsModule } from './google-maps/google-maps.module';
+import { GoogleMapsService } from './google-maps/google-maps.service';
 import { AuthModule } from './auth/auth.module';
 import { LojasModule } from './lojas/lojas.module';
 import { LojistasModule } from './lojistas/lojistas.module';
+import { GeocodingController } from './geocoding/geocoding.controller';
 
 @Module({
-  imports: [ 
-    MongooseModule.forRoot('mongodb://localhost/deliveryDB'), 
-    EntregadoresModule, 
-    GoogleMapsModule, 
-    EntregasModule,
+  imports: [
     ConfigModule.forRoot({
-    isGlobal: true
-  }),
+      isGlobal: true,
+    }),
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule], 
+      useFactory: async (configService: ConfigService) => ({
+        uri: configService.get<string>('DATABASE_URL'), 
+      }),
+      inject: [ConfigService], 
+    }),
+    EntregadoresModule,
+    GoogleMapsModule,
+    EntregasModule,
     AuthModule,
     LojasModule,
-    LojistasModule
+    LojistasModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
-  exports: []
+  controllers: [AppController, GeocodingController],
+  providers: [AppService, GoogleMapsService],
+  exports: [],
 })
 export class AppModule {}

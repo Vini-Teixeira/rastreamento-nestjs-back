@@ -1,19 +1,22 @@
-import { Document } from 'mongoose';
-import { Coordinates } from '../../entregas/schemas/delivery.schema';
-export type EntregadorDocument = Entregador & Document;
-export declare class Entregador extends Document {
+import { HydratedDocument } from 'mongoose';
+export declare class Entregador {
     nome: string;
     telefone: string;
     ativo: boolean;
     password: string;
-    localizacao?: Coordinates;
+    emEntrega: boolean;
+    localizacao?: {
+        type: 'Point';
+        coordinates: number[];
+    };
 }
-export declare const EntregadorSchema: import("mongoose").Schema<Entregador, import("mongoose").Model<Entregador, any, any, any, Document<unknown, any, Entregador, any> & Entregador & Required<{
-    _id: unknown;
-}> & {
+export type EntregadorDocument = HydratedDocument<Entregador>;
+export declare const EntregadorSchema: import("mongoose").Schema<Entregador, import("mongoose").Model<Entregador, any, any, any, import("mongoose").Document<unknown, any, Entregador, any> & Entregador & {
+    _id: import("mongoose").Types.ObjectId;
+} & {
     __v: number;
-}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Entregador, Document<unknown, {}, import("mongoose").FlatRecord<Entregador>, {}> & import("mongoose").FlatRecord<Entregador> & Required<{
-    _id: unknown;
-}> & {
+}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Entregador, import("mongoose").Document<unknown, {}, import("mongoose").FlatRecord<Entregador>, {}> & import("mongoose").FlatRecord<Entregador> & {
+    _id: import("mongoose").Types.ObjectId;
+} & {
     __v: number;
 }>;

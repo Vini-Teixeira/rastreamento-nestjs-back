@@ -15,29 +15,37 @@ const entregas_module_1 = require("./entregas/entregas.module");
 const mongoose_1 = require("@nestjs/mongoose");
 const config_1 = require("@nestjs/config");
 const google_maps_module_1 = require("./google-maps/google-maps.module");
+const google_maps_service_1 = require("./google-maps/google-maps.service");
 const auth_module_1 = require("./auth/auth.module");
 const lojas_module_1 = require("./lojas/lojas.module");
 const lojistas_module_1 = require("./lojistas/lojistas.module");
+const geocoding_controller_1 = require("./geocoding/geocoding.controller");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            mongoose_1.MongooseModule.forRoot('mongodb://localhost/deliveryDB'),
+            config_1.ConfigModule.forRoot({
+                isGlobal: true,
+            }),
+            mongoose_1.MongooseModule.forRootAsync({
+                imports: [config_1.ConfigModule],
+                useFactory: async (configService) => ({
+                    uri: configService.get('DATABASE_URL'),
+                }),
+                inject: [config_1.ConfigService],
+            }),
             entregadores_module_1.EntregadoresModule,
             google_maps_module_1.GoogleMapsModule,
             entregas_module_1.EntregasModule,
-            config_1.ConfigModule.forRoot({
-                isGlobal: true
-            }),
             auth_module_1.AuthModule,
             lojas_module_1.LojasModule,
-            lojistas_module_1.LojistasModule
+            lojistas_module_1.LojistasModule,
         ],
-        controllers: [app_controller_1.AppController],
-        providers: [app_service_1.AppService],
-        exports: []
+        controllers: [app_controller_1.AppController, geocoding_controller_1.GeocodingController],
+        providers: [app_service_1.AppService, google_maps_service_1.GoogleMapsService],
+        exports: [],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

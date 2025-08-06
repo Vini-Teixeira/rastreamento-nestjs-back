@@ -11,10 +11,8 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EntregadorSchema = exports.Entregador = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
-const mongoose_2 = require("mongoose");
 const bcrypt = require("bcrypt");
-const delivery_schema_1 = require("../../entregas/schemas/delivery.schema");
-let Entregador = class Entregador extends mongoose_2.Document {
+let Entregador = class Entregador {
 };
 exports.Entregador = Entregador;
 __decorate([
@@ -34,13 +32,18 @@ __decorate([
     __metadata("design:type", String)
 ], Entregador.prototype, "password", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: delivery_schema_1.CoordinatesSchema, required: false }),
-    __metadata("design:type", delivery_schema_1.Coordinates)
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Entregador.prototype, "emEntrega", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Object, required: false }),
+    __metadata("design:type", Object)
 ], Entregador.prototype, "localizacao", void 0);
 exports.Entregador = Entregador = __decorate([
-    (0, mongoose_1.Schema)()
+    (0, mongoose_1.Schema)({ timestamps: true })
 ], Entregador);
-exports.EntregadorSchema = mongoose_1.SchemaFactory.createForClass(Entregador);
+exports.EntregadorSchema = mongoose_1.SchemaFactory.createForClass(Entregador)
+    .index({ localizacao: '2dsphere' });
 exports.EntregadorSchema.pre('save', async function (next) {
     if (!this.isModified('password')) {
         return next();

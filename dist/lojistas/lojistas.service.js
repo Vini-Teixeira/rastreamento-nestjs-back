@@ -16,12 +16,17 @@ exports.LojistasService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
+const bcrypt = require("bcrypt");
 const lojista_schema_1 = require("./schemas/lojista.schema");
 let LojistasService = class LojistasService {
     constructor(lojistaModel) {
         this.lojistaModel = lojistaModel;
     }
     async create(createLojistaDto) {
+        const existingLojista = await this.findOneByEmail(createLojistaDto.email);
+        if (existingLojista) {
+            throw new common_1.ConflictException('Este email já está cadastrado.');
+        }
         const createdLojista = new this.lojistaModel(createLojistaDto);
         return createdLojista.save();
     }
@@ -30,6 +35,14 @@ let LojistasService = class LojistasService {
     }
     async findOneByEmailWithPassword(email) {
         return this.lojistaModel.findOne({ email }).select('+password').exec();
+    }
+    async validatePassword(email, pass) {
+        const lojista = await this.findOneByEmailWithPassword(email);
+        if (lojista && (await bcrypt.compare(pass, lojista.password))) {
+            const { password, ...result } = lojista.toObject();
+            return result;
+        }
+        return null;
     }
 };
 exports.LojistasService = LojistasService;

@@ -1,19 +1,26 @@
 import { Model } from 'mongoose';
 import { Delivery, DeliveryDocument, DeliveryStatus, Coordinates } from './schemas/delivery.schema';
+import { EntregadorDocument } from '../entregadores/schemas/entregador.schema';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { UpdateDeliveryDto } from './dto/update-delivery.dto';
-import { EntregadoresService } from '../entregadores/entregadores.service';
 import { GoogleMapsService } from '../google-maps/google-maps.service';
 import { EntregadoresGateway } from 'src/entregadores/entregadores.gateway';
+declare class LocationPointDto {
+    deliveryId: string;
+    lat: number;
+    lng: number;
+    timestamp: Date;
+}
 export declare class EntregasService {
     private deliveryModel;
-    private entregadoresService;
+    private entregadorModel;
     private googleMapsService;
     private entregadoresGateway;
     private readonly logger;
-    constructor(deliveryModel: Model<DeliveryDocument>, entregadoresService: EntregadoresService, googleMapsService: GoogleMapsService, entregadoresGateway: EntregadoresGateway);
+    constructor(deliveryModel: Model<DeliveryDocument>, entregadorModel: Model<EntregadorDocument>, googleMapsService: GoogleMapsService, entregadoresGateway: EntregadoresGateway);
     create(createDeliveryDto: CreateDeliveryDto): Promise<Delivery>;
-    findFilteredAndPaginated(statuses?: DeliveryStatus[], page?: number, limit?: number): Promise<{
+    private _findNearestDriverInfo;
+    findFilteredAndPaginated(statuses: DeliveryStatus[], page?: number, limit?: number): Promise<{
         deliveries: Delivery[];
         total: number;
         page: number;
@@ -27,4 +34,6 @@ export declare class EntregasService {
     updateDriverLocation(deliveryId: string, lat: number, lng: number): Promise<Delivery>;
     getSnappedRoutePolyline(origin: Coordinates, destination: Coordinates): Promise<string>;
     getDriverToDestinationPolyline(driverLocation: Coordinates, destination: Coordinates): Promise<string>;
+    bulkUpdateDriverLocations(driverId: string, locations: LocationPointDto[]): Promise<void>;
 }
+export {};

@@ -12,49 +12,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
-const bcrypt = require("bcrypt");
-const entregadores_service_1 = require("../entregadores/entregadores.service");
-const lojistas_service_1 = require("../lojistas/lojistas.service");
 let AuthService = class AuthService {
-    constructor(entregadoresService, lojistasService, jwtService) {
-        this.entregadoresService = entregadoresService;
-        this.lojistasService = lojistasService;
+    constructor(jwtService) {
         this.jwtService = jwtService;
-    }
-    async validateDriver(telefone, pass) {
-        const driver = await this.entregadoresService.findOneByPhoneWithPassword(telefone);
-        if (driver && (await bcrypt.compare(pass, driver.password))) {
-            const { password, ...result } = driver.toObject();
-            return result;
-        }
-        return null;
     }
     async loginDriver(driver) {
         const payload = { sub: driver._id, telefone: driver.telefone };
         return {
-            message: 'Login bem-sucedido!',
             access_token: this.jwtService.sign(payload),
         };
-    }
-    async registerLojista(createLojistaDto) {
-        const existingLojista = await this.lojistasService.findOneByEmail(createLojistaDto.email);
-        if (existingLojista) {
-            throw new common_1.ConflictException('Este email já está cadastrado.');
-        }
-        return this.lojistasService.create(createLojistaDto);
-    }
-    async validateLojista(email, pass) {
-        const lojista = await this.lojistasService.findOneByEmailWithPassword(email);
-        if (lojista && (await bcrypt.compare(pass, lojista.password))) {
-            const { password, ...result } = lojista.toObject();
-            return result;
-        }
-        return null;
     }
     async loginLojista(lojista) {
         const payload = { sub: lojista._id, email: lojista.email, type: 'lojista' };
         return {
-            message: 'Login bem sucedido!',
             access_token: this.jwtService.sign(payload),
         };
     }
@@ -62,8 +32,6 @@ let AuthService = class AuthService {
 exports.AuthService = AuthService;
 exports.AuthService = AuthService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [entregadores_service_1.EntregadoresService,
-        lojistas_service_1.LojistasService,
-        jwt_1.JwtService])
+    __metadata("design:paramtypes", [jwt_1.JwtService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

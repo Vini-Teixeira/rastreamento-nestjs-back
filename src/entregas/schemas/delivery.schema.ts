@@ -1,7 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose'; 
-
-export type DeliveryDocument = Delivery & Document;
+import { HydratedDocument, Types } from 'mongoose';
 
 export enum DeliveryStatus {
   PENDING = 'pending',
@@ -29,15 +27,13 @@ export class Location {
   @Prop({ required: true })
   address: string;
 
-
   @Prop({ required: true, type: CoordinatesSchema })
   coordinates: Coordinates; 
 }
 export const LocationSchema = SchemaFactory.createForClass(Location); 
 
-
 @Schema({ timestamps: true })
-export class Delivery extends Document {
+export class Delivery {
   @Prop({ required: true, type: LocationSchema })
   origin: Location;
 
@@ -60,4 +56,5 @@ export class Delivery extends Document {
   driverCurrentLocation?: Coordinates;
 }
 
+export type DeliveryDocument = HydratedDocument<Delivery>;
 export const DeliverySchema = SchemaFactory.createForClass(Delivery);

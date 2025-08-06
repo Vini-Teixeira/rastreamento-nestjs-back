@@ -22,7 +22,16 @@ let LojasService = class LojasService {
         this.lojaModel = lojaModel;
     }
     async create(createLojaDto) {
-        const createdLoja = new this.lojaModel(createLojaDto);
+        const { nome, endereco, coordenadas } = createLojaDto;
+        const geoJsonPoint = {
+            type: 'Point',
+            coordinates: [coordenadas.lng, coordenadas.lat],
+        };
+        const createdLoja = new this.lojaModel({
+            nome,
+            endereco,
+            coordenadas: geoJsonPoint,
+        });
         return createdLoja.save();
     }
     async findAll() {

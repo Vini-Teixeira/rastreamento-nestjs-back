@@ -14,7 +14,8 @@ async function bootstrap() {
     });
     app.useGlobalPipes(new common_1.ValidationPipe());
     app.useWebSocketAdapter(new platform_socket_io_1.IoAdapter(app));
-    await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
+    const port = process.env.PORT || 3000;
+    await app.listen(port, '0.0.0.0');
 }
 bootstrap();
 //# sourceMappingURL=main.js.map

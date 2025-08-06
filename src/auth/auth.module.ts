@@ -1,20 +1,18 @@
-import { Module, forwardRef } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { PassportModule } from '@nestjs/passport';
-import { EntregadoresModule } from 'src/entregadores/entregadores.module';
-import { LojistasModule } from 'src/lojistas/lojistas.module';
-import { FirebaseAdminProvider } from './firebase-admin.provider';
-import { FirebaseAuthGuard } from './firebase-auth/firebase-auth.guard';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './jwt.strategy';
+import { PassportModule } from '@nestjs/passport';
+import { LojistasModule } from 'src/lojistas/lojistas.module';
+import { EntregadoresModule } from 'src/entregadores/entregadores.module';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { WsAuthGuard } from './guards/ws-auth.guard';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    LojistasModule,
-    forwardRef(() => EntregadoresModule),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -23,14 +21,16 @@ import { JwtStrategy } from './jwt.strategy';
         signOptions: { expiresIn: '7d' },
       }),
     }),
+    LojistasModule,
+    EntregadoresModule,
   ],
   controllers: [AuthController],
   providers: [
     AuthService,
-    FirebaseAdminProvider,
-    FirebaseAuthGuard,
     JwtStrategy,
+    JwtAuthGuard,
+    WsAuthGuard,
   ],
-  exports: [FirebaseAdminProvider, FirebaseAuthGuard, PassportModule, JwtModule], 
+  exports: [PassportModule, AuthService, JwtAuthGuard, WsAuthGuard],
 })
 export class AuthModule {}

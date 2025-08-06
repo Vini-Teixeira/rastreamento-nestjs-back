@@ -11,7 +11,19 @@ export class LojasService {
   ) {}
 
   async create(createLojaDto: CreateLojaDto): Promise<Loja> {
-    const createdLoja = new this.lojaModel(createLojaDto);
+    const { nome, endereco, coordenadas } = createLojaDto;
+
+    const geoJsonPoint = {
+      type: 'Point' as const, 
+      coordinates: [coordenadas.lng, coordenadas.lat], 
+    };
+
+    const createdLoja = new this.lojaModel({
+      nome,
+      endereco,
+      coordenadas: geoJsonPoint,
+    });
+    
     return createdLoja.save();
   }
 

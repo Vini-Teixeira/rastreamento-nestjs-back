@@ -15,28 +15,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
 const auth_service_1 = require("./auth.service");
-const driver_login_dto_1 = require("./dto/driver-login.dto");
+const lojistas_service_1 = require("../lojistas/lojistas.service");
 const lojista_login_dto_1 = require("./dto/lojista-login.dto");
-const create_lojista_dto_1 = require("../lojistas/dto/create-lojista.dto");
 let AuthController = class AuthController {
-    constructor(authService) {
+    constructor(authService, lojistasService) {
         this.authService = authService;
-    }
-    async driverLogin(driverLoginDto) {
-        const driver = await this.authService.validateDriver(driverLoginDto.telefone, driverLoginDto.password);
-        if (!driver) {
-            throw new common_1.UnauthorizedException('Credenciais inválidas.');
-        }
-        if (!driver.ativo) {
-            throw new common_1.UnauthorizedException('Este entregador está inativo e não pode fazer login.');
-        }
-        return this.authService.loginDriver(driver);
-    }
-    async registerLojista(createLojistaDto) {
-        return this.authService.registerLojista(createLojistaDto);
+        this.lojistasService = lojistasService;
     }
     async lojistaLogin(lojistaLoginDto) {
-        const lojista = await this.authService.validateLojista(lojistaLoginDto.email, lojistaLoginDto.password);
+        const lojista = await this.lojistasService.validatePassword(lojistaLoginDto.email, lojistaLoginDto.password);
         if (!lojista) {
             throw new common_1.UnauthorizedException('Credenciais de lojista inválidas.');
         }
@@ -44,20 +31,6 @@ let AuthController = class AuthController {
     }
 };
 exports.AuthController = AuthController;
-__decorate([
-    (0, common_1.Post)('driver/login'),
-    __param(0, (0, common_1.Body)(new common_1.ValidationPipe())),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [driver_login_dto_1.DriverLoginDto]),
-    __metadata("design:returntype", Promise)
-], AuthController.prototype, "driverLogin", null);
-__decorate([
-    (0, common_1.Post)('lojista/register'),
-    __param(0, (0, common_1.Body)(new common_1.ValidationPipe())),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_lojista_dto_1.CreateLojistaDto]),
-    __metadata("design:returntype", Promise)
-], AuthController.prototype, "registerLojista", null);
 __decorate([
     (0, common_1.Post)('lojista/login'),
     __param(0, (0, common_1.Body)(new common_1.ValidationPipe())),
@@ -67,6 +40,7 @@ __decorate([
 ], AuthController.prototype, "lojistaLogin", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
-    __metadata("design:paramtypes", [auth_service_1.AuthService])
+    __metadata("design:paramtypes", [auth_service_1.AuthService,
+        lojistas_service_1.LojistasService])
 ], AuthController);
 //# sourceMappingURL=auth.controller.js.map

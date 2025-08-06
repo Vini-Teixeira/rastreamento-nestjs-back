@@ -1,24 +1,6 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Patch,
-  Delete,
-  Param,
-  Body,
-  Query,
-  HttpStatus,
-  HttpCode,
-  ValidationPipe,
-  ParseFloatPipe,
-  NotFoundException,
-  ForbiddenException,
-  ParseArrayPipe,
-  DefaultValuePipe,
-  UseGuards,
-  Req,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Param, Body, Query, HttpStatus, HttpCode, ValidationPipe,
+  ParseFloatPipe, NotFoundException, ForbiddenException, ParseArrayPipe, DefaultValuePipe, UseGuards,
+  Req, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
 import { EntregasService } from './entregas.service';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
@@ -30,75 +12,91 @@ import {
 } from './schemas/delivery.schema';
 import { FirebaseAuthGuard } from 'src/auth/firebase-auth/firebase-auth.guard';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { AuthGuard } from '@nestjs/passport';
+
+class SyncLocationDto {
+  locations: {
+    deliveryId: string;
+    lat: number;
+    lng: number;
+    timestamp: Date;
+  }[];
+}
 
 @Controller('entregas')
 export class EntregasController {
   constructor(private readonly entregasService: EntregasService) {}
 
+  @Post('localizacoes/sync')
+  @UseGuards(JwtAuthGuard) 
+  async syncLocations(@Body() syncLocationDto: SyncLocationDto, @Req() req) {
+    const driverId = req.user.sub;
+    this.entregasService.bulkUpdateDriverLocations(driverId, syncLocationDto.locations);
+    return { message: 'Localizações sincronizadas com sucesso!' };
+  }
+
   // --- ROTAS PARA ENTREGADORES (Protegidas por JWT) ---
 
   @Get('minhas-entregas')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AuthGuard('jwt')) 
   async findMyDeliveries(@Req() request: Request) {
-    const driver = request.user as any;
-    if (!driver || !driver._id) {
+    const driver = request.user as any; 
+    
+    if (!driver || !driver.sub) {
       throw new NotFoundException('ID do entregador não encontrado no token.');
     }
-    return this.entregasService.findAllByDriverId(driver._id);
+    
+    return this.entregasService.findAllByDriverId(driver.sub);
   }
 
   @Get('detalhes/:id')
   @UseGuards(JwtAuthGuard)
-  async findDeliveryDetailsForDriver(
+  async findDeliveryDetailsForDriver(@Param('id') id: string, @Req() request: Request) {
+    const delivery = await this.entregasService.findOne(id);
+    if (!delivery) throw new NotFoundException(`Entrega com ID "${id}" não encontrada.`);
+    
+    const driver = request.user as any;
+    if (!delivery.driverId) throw new UnauthorizedException('Esta entrega não está atribuída a nenhum entregador.');
+
+    if (delivery.driverId._id.toString() !== driver.sub.toString()) {
+      throw new UnauthorizedException('Você não tem permissão para ver os detalhes desta entrega.');
+    }
+    return delivery;
+  }
+
+  @Get('detalhes/:id/directions')
+  @UseGuards(JwtAuthGuard)
+  async getDeliveryDirectionsForDriver(
     @Param('id') id: string,
     @Req() request: Request,
   ) {
     const delivery = await this.entregasService.findOne(id);
-    if (!delivery) {
-      throw new NotFoundException(`Entrega com ID "${id}" não encontrada.`);
-    }
-
-    const driver = request.user as any;
-    if (!delivery.driverId) {
-      throw new UnauthorizedException(
-        'Esta entrega não está atribuída a nenhum entregador.',
-      );
-    }
-
-    if (delivery.driverId._id.toString() !== driver._id.toString()) {
-      throw new UnauthorizedException(
-        'Você não tem permissão para ver os detalhes desta entrega.',
-      );
-    }
-    return delivery;
-  }
-  
-  // --- NOVOS ENDPOINTS DE AÇÃO ---
-  @Get('detalhes/:id/directions')
-  @UseGuards(JwtAuthGuard)
-  async getDeliveryDirectionsForDriver(@Param('id') id: string, @Req() request: Request) {
-    // Reutilizamos a mesma lógica de verificação de permissão
-    const delivery = await this.entregasService.findOne(id);
     const driver = request.user as any;
     if (!delivery) throw new NotFoundException('Entrega não encontrada.');
-    if (!delivery.driverId || delivery.driverId._id.toString() !== driver._id.toString()) {
-      throw new UnauthorizedException('Você não tem permissão para ver a rota desta entrega.');
+    if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
+      throw new UnauthorizedException(
+        'Você não tem permissão para ver a rota desta entrega.',
+      );
     }
 
-    // A lógica para obter a polyline, que já existe no seu controller
     let originCoords: Coordinates;
     let destinationCoords: Coordinates;
-    if (delivery.status.toUpperCase() === 'ON_THE_WAY' && delivery.driverCurrentLocation) {
+    if (
+      delivery.status.toUpperCase() === 'ON_THE_WAY' &&
+      delivery.driverCurrentLocation
+    ) {
       originCoords = delivery.driverCurrentLocation;
       destinationCoords = delivery.destination.coordinates;
     } else {
       originCoords = delivery.origin.coordinates;
       destinationCoords = delivery.destination.coordinates;
     }
-    const polyline = await this.entregasService.getSnappedRoutePolyline(originCoords, destinationCoords);
+    const polyline = await this.entregasService.getSnappedRoutePolyline(
+      originCoords,
+      destinationCoords,
+    );
     return { polyline };
   }
-
 
   @Patch(':id/aceitar')
   @UseGuards(JwtAuthGuard)
@@ -107,37 +105,43 @@ export class EntregasController {
     const driver = request.user as any;
 
     if (!delivery) throw new NotFoundException('Entrega não encontrada.');
-    if (!delivery.driverId || delivery.driverId._id.toString() !== driver._id.toString()) {
-      throw new UnauthorizedException('Você não tem permissão para modificar esta entrega.');
+    if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
+      throw new UnauthorizedException(
+        'Você não tem permissão para modificar esta entrega.',
+      );
     }
-    
+
     if (delivery.status !== DeliveryStatus.PENDING) {
-      throw new ForbiddenException('Apenas entregas pendentes podem ser aceitas.');
+      throw new ForbiddenException(
+        'Apenas entregas pendentes podem ser aceitas.',
+      );
     }
-    
-    // Conforme nossa nova regra de negócio, ao aceitar, o status vai para ACCEPTED
+
     return this.entregasService.update(id, { status: DeliveryStatus.ACCEPTED });
   }
 
   @Patch(':id/coletar')
   @UseGuards(JwtAuthGuard)
   async collectItem(@Param('id') id: string, @Req() request: Request) {
-    // Reutilizamos a mesma lógica de verificação de permissão
     const delivery = await this.entregasService.findOne(id);
     const driver = request.user as any;
 
     if (!delivery) throw new NotFoundException('Entrega não encontrada.');
-    if (!delivery.driverId || delivery.driverId._id.toString() !== driver._id.toString()) {
-      throw new UnauthorizedException('Você não tem permissão para modificar esta entrega.');
-    }
-    
-    // Lógica de negócio: Apenas entregas aceitas podem ser coletadas
-    if (delivery.status !== DeliveryStatus.ACCEPTED) {
-      throw new ForbiddenException('Apenas entregas com status "accepted" podem ser coletadas.');
+    if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
+      throw new UnauthorizedException(
+        'Você não tem permissão para modificar esta entrega.',
+      );
     }
 
-    // Atualiza o status para ON_THE_WAY e salva
-    return this.entregasService.update(id, { status: DeliveryStatus.ON_THE_WAY });
+    if (delivery.status !== DeliveryStatus.ACCEPTED) {
+      throw new ForbiddenException(
+        'Apenas entregas com status "accepted" podem ser coletadas.',
+      );
+    }
+
+    return this.entregasService.update(id, {
+      status: DeliveryStatus.ON_THE_WAY,
+    });
   }
 
   @Patch(':id/finalizar')
@@ -147,16 +151,21 @@ export class EntregasController {
     const driver = request.user as any;
 
     if (!delivery) throw new NotFoundException('Entrega não encontrada.');
-    if (!delivery.driverId || delivery.driverId._id.toString() !== driver._id.toString()) {
-      throw new UnauthorizedException('Você não tem permissão para modificar esta entrega.');
+    if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()){
+      throw new UnauthorizedException(
+        'Você não tem permissão para modificar esta entrega.',
+      );
     }
 
-    // Apenas entregas "A caminho" podem ser finalizadas
     if (delivery.status !== DeliveryStatus.ON_THE_WAY) {
-      throw new ForbiddenException('Apenas entregas "a caminho" podem ser finalizadas.');
+      throw new ForbiddenException(
+        'Apenas entregas "a caminho" podem ser finalizadas.',
+      );
     }
 
-    return this.entregasService.update(id, { status: DeliveryStatus.DELIVERED });
+    return this.entregasService.update(id, {
+      status: DeliveryStatus.DELIVERED,
+    });
   }
 
   // --- ROTAS PARA ADMINISTRADORES (Protegidas por Firebase) ---
@@ -188,7 +197,9 @@ export class EntregasController {
     limit: number;
   }> {
     const statuses: DeliveryStatus[] = statusStrings
-      .filter((s) => Object.values(DeliveryStatus).includes(s as DeliveryStatus))
+      .filter((s) =>
+        Object.values(DeliveryStatus).includes(s as DeliveryStatus),
+      )
       .map((s) => s as DeliveryStatus);
     return this.entregasService.findFilteredAndPaginated(statuses, page, limit);
   }

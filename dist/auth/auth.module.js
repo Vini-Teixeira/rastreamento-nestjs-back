@@ -8,16 +8,16 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthModule = void 0;
 const common_1 = require("@nestjs/common");
-const jwt_1 = require("@nestjs/jwt");
 const config_1 = require("@nestjs/config");
-const passport_1 = require("@nestjs/passport");
-const entregadores_module_1 = require("../entregadores/entregadores.module");
-const lojistas_module_1 = require("../lojistas/lojistas.module");
-const firebase_admin_provider_1 = require("./firebase-admin.provider");
-const firebase_auth_guard_1 = require("./firebase-auth/firebase-auth.guard");
 const auth_service_1 = require("./auth.service");
 const auth_controller_1 = require("./auth.controller");
+const jwt_1 = require("@nestjs/jwt");
 const jwt_strategy_1 = require("./jwt.strategy");
+const passport_1 = require("@nestjs/passport");
+const lojistas_module_1 = require("../lojistas/lojistas.module");
+const entregadores_module_1 = require("../entregadores/entregadores.module");
+const jwt_auth_guard_1 = require("./jwt-auth.guard");
+const ws_auth_guard_1 = require("./guards/ws-auth.guard");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -25,8 +25,6 @@ exports.AuthModule = AuthModule = __decorate([
     (0, common_1.Module)({
         imports: [
             passport_1.PassportModule.register({ defaultStrategy: 'jwt' }),
-            lojistas_module_1.LojistasModule,
-            (0, common_1.forwardRef)(() => entregadores_module_1.EntregadoresModule),
             jwt_1.JwtModule.registerAsync({
                 imports: [config_1.ConfigModule],
                 inject: [config_1.ConfigService],
@@ -35,15 +33,17 @@ exports.AuthModule = AuthModule = __decorate([
                     signOptions: { expiresIn: '7d' },
                 }),
             }),
+            lojistas_module_1.LojistasModule,
+            entregadores_module_1.EntregadoresModule,
         ],
         controllers: [auth_controller_1.AuthController],
         providers: [
             auth_service_1.AuthService,
-            firebase_admin_provider_1.FirebaseAdminProvider,
-            firebase_auth_guard_1.FirebaseAuthGuard,
             jwt_strategy_1.JwtStrategy,
+            jwt_auth_guard_1.JwtAuthGuard,
+            ws_auth_guard_1.WsAuthGuard,
         ],
-        exports: [firebase_admin_provider_1.FirebaseAdminProvider, firebase_auth_guard_1.FirebaseAuthGuard, passport_1.PassportModule, jwt_1.JwtModule],
+        exports: [passport_1.PassportModule, auth_service_1.AuthService, jwt_auth_guard_1.JwtAuthGuard, ws_auth_guard_1.WsAuthGuard],
     })
 ], AuthModule);
 //# sourceMappingURL=auth.module.js.map

@@ -1,20 +1,23 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
-import { EntregasController } from './entregas.controller';
 import { EntregasService } from './entregas.service';
-import { Delivery, DeliverySchema } from './schemas/delivery.schema';
-import { EntregadoresModule } from '../entregadores/entregadores.module';
-import { GoogleMapsService } from 'src/google-maps/google-maps.service';
+import { EntregasController } from './entregas.controller';
+import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from 'src/auth/auth.module';
+import { GoogleMapsModule } from 'src/google-maps/google-maps.module';
+import { EntregadoresModule } from 'src/entregadores/entregadores.module';
+import { Delivery, DeliverySchema } from './schemas/delivery.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Delivery.name, schema: DeliverySchema }]),
+    MongooseModule.forFeature([
+      { name: Delivery.name, schema: DeliverySchema }
+    ]),
+    GoogleMapsModule,
     forwardRef(() => EntregadoresModule),
-    AuthModule
+    AuthModule,
   ],
   controllers: [EntregasController],
-  providers: [EntregasService, GoogleMapsService],
-  exports: [EntregasService],
+  providers: [EntregasService],
+  exports: [EntregasService]
 })
 export class EntregasModule {}

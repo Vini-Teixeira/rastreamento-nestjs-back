@@ -1,18 +1,20 @@
 import { Provider } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config'; 
 import * as admin from 'firebase-admin';
 
 export const FIREBASE_ADMIN = 'FIREBASE_ADMIN';
 
 export const FirebaseAdminProvider: Provider = {
   provide: FIREBASE_ADMIN,
-  useFactory: () => {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  inject: [ConfigService],
+  useFactory: (configService: ConfigService) => {
+    const projectId = configService.get<string>('FIREBASE_PROJECT_ID');
+    const clientEmail = configService.get<string>('FIREBASE_CLIENT_EMAIL');
+    const privateKey = configService.get<string>('FIREBASE_PRIVATE_KEY');
 
     if (!projectId || !clientEmail || !privateKey) {
       throw new Error(
-        'As variáveis de ambiente do Firebase (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY) não estão definidas. Verifique seu arquivo .env.',
+        'As variáveis de ambiente do Firebase não estão definidas. Verifique a configuração do serviço.',
       );
     }
 
@@ -26,7 +28,9 @@ export const FirebaseAdminProvider: Provider = {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });
-      console.log('>>> Firebase Admin inicializado com sucesso a partir das variáveis de ambiente!');
+      console.log(
+        '>>> Firebase Admin inicializado com sucesso a partir do ConfigService!',
+      );
     }
 
     return admin;

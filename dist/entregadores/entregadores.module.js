@@ -15,18 +15,22 @@ const entregadores_controller_1 = require("./entregadores.controller");
 const entregadores_gateway_1 = require("./entregadores.gateway");
 const entregador_schema_1 = require("./schemas/entregador.schema");
 const auth_module_1 = require("../auth/auth.module");
+const EntregadorMongooseModule = mongoose_1.MongooseModule.forFeature([
+    { name: entregador_schema_1.Entregador.name, schema: entregador_schema_1.EntregadorSchema }
+]);
 let EntregadoresModule = class EntregadoresModule {
 };
 exports.EntregadoresModule = EntregadoresModule;
 exports.EntregadoresModule = EntregadoresModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            mongoose_1.MongooseModule.forFeature([{ name: entregador_schema_1.Entregador.name, schema: entregador_schema_1.EntregadorSchema }]), auth_module_1.AuthModule,
+            EntregadorMongooseModule,
             (0, common_1.forwardRef)(() => entregas_module_1.EntregasModule),
+            auth_module_1.AuthModule,
         ],
         controllers: [entregadores_controller_1.EntregadoresController],
         providers: [entregadores_service_1.EntregadoresService, entregadores_gateway_1.EntregadoresGateway],
-        exports: [entregadores_service_1.EntregadoresService, entregadores_gateway_1.EntregadoresGateway],
+        exports: [entregadores_service_1.EntregadoresService, entregadores_gateway_1.EntregadoresGateway, EntregadorMongooseModule],
     })
 ], EntregadoresModule);
 //# sourceMappingURL=entregadores.module.js.map

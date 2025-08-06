@@ -1,6 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
-import { Coordinates, CoordinatesSchema } from 'src/entregas/schemas/delivery.schema';
+import { Document } from 'mongoose';
 
 export type LojaDocument = Loja & Document;
 
@@ -12,8 +11,22 @@ export class Loja extends Document {
     @Prop({ required: true })
     endereco: string;
 
-    @Prop({ required: true, type: CoordinatesSchema })
-    coordenadas: Coordinates;
+    @Prop({
+      type: {
+        type: String,
+        enum: ['Point'],
+        required: true,
+      },
+      coordinates: {
+        type: [Number],
+        required: true,
+      }
+    })
+    coordenadas: {
+      type: 'Point',
+      coordinates: number[]
+    };
 }
 
-export const LojaSchema = SchemaFactory.createForClass(Loja);
+export const LojaSchema = SchemaFactory.createForClass(Loja)
+  .index({ coordenadas: '2dsphere' });

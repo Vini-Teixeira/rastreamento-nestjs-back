@@ -16,59 +16,50 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.EntregadoresGateway = void 0;
 const websockets_1 = require("@nestjs/websockets");
 const socket_io_1 = require("socket.io");
-const entregadores_service_1 = require("./entregadores.service");
 const common_1 = require("@nestjs/common");
-const mongoose_1 = require("mongoose");
 const entregas_service_1 = require("../entregas/entregas.service");
-const jwt_1 = require("@nestjs/jwt");
+const ws_auth_guard_1 = require("../auth/guards/ws-auth.guard");
 let EntregadoresGateway = EntregadoresGateway_1 = class EntregadoresGateway {
-    constructor(entregadoresService, entregasService, jwtService) {
-        this.entregadoresService = entregadoresService;
+    constructor(entregasService) {
         this.entregasService = entregasService;
-        this.jwtService = jwtService;
         this.logger = new common_1.Logger(EntregadoresGateway_1.name);
     }
     handleConnection(client) {
-        this.logger.log(`Cliente Conectado: ${client.id}`);
-        client.emit('connectionSuccess', { message: 'Conectado!' });
+        const driverId = client.user.sub;
+        client.join(driverId);
+        this.logger.log(`Cliente Conectado: ${client.id} (Entregador: ${driverId})`);
+        client.emit('connectionSuccess', { message: 'Conectado com sucesso!' });
     }
     handleDisconnect(client) {
-        this.logger.log(`Cliente Desconectado: ${client.id}`);
+        const driverId = client.user ? client.user.sub : 'não autenticado';
+        this.logger.log(`Cliente Desconectado: ${client.id} (Entregador: ${driverId})`);
     }
-    async handleJoinDeliveryRoom(client, deliveryId) {
-        const idToValidate = String(deliveryId);
-        if (!idToValidate || !mongoose_1.Types.ObjectId.isValid(idToValidate)) {
-            throw new websockets_1.WsException('ID da entrega inválido para entrar na sala.');
+    async handleLocationUpdate(client, payload) {
+        const driverIdFromToken = client.user.sub;
+        this.logger.log(`Recebendo localização do entregador ${driverIdFromToken} para a entrega ${payload.deliveryId}`);
+        try {
+            const delivery = await this.entregasService.findOne(payload.deliveryId);
+            if (!delivery.driverId || delivery.driverId._id.toString() !== driverIdFromToken) {
+                throw new websockets_1.WsException('Ação não autorizada para esta entrega.');
+            }
+            await this.entregasService.updateDriverLocation(payload.deliveryId, payload.lat, payload.lng);
         }
-        client.join(idToValidate);
-        this.logger.log(`Cliente ${client.id} entrou na sala da entrega: ${idToValidate}`);
+        catch (error) {
+            this.logger.error(`Erro ao processar localização para o entregador ${driverIdFromToken}: ${error.message}`);
+            client.emit('erro_localizacao', { message: error.message });
+        }
+    }
+    notifyNewDelivery(driverId, delivery) {
+        this.logger.log(`Enviando notificação de nova entrega para a sala do entregador: ${driverId}`);
+        this.server.to(driverId).emit('nova_entrega', delivery);
+    }
+    handleJoinDeliveryRoom(client, deliveryId) {
+        client.join(deliveryId);
+        this.logger.log(`Cliente ${client.id} entrou na sala da entrega: ${deliveryId}`);
     }
     handleLeaveDeliveryRoom(client, deliveryId) {
         client.leave(deliveryId);
         this.logger.log(`Cliente ${client.id} saiu da sala da entrega: ${deliveryId}`);
-    }
-    async handleLocationUpdate(client, payload) {
-        try {
-            const decodedToken = this.jwtService.verify(payload.token);
-            const driverIdFromToken = decodedToken.sub;
-            const delivery = await this.entregasService.findOne(payload.deliveryId);
-            if (!delivery) {
-                throw new websockets_1.WsException('Entrega não encontrada.');
-            }
-            if (!delivery.driverId) {
-                throw new websockets_1.WsException('A entrega não possui um entregador atribuído.');
-            }
-            if (delivery.driverId._id.toString() !== driverIdFromToken) {
-                throw new websockets_1.WsException('Token não autorizado para esta entrega.');
-            }
-            await this.entregasService.updateDriverLocation(payload.deliveryId, payload.lat, payload.lng);
-            client.emit('localizacaoRecebida', { success: true });
-        }
-        catch (error) {
-            this.logger.error(`Erro no evento 'enviarLocalizacao': ${error.message}`);
-            client.emit('erroLocalizacao', { message: error.message });
-            throw new websockets_1.WsException(error.message);
-        }
     }
 };
 exports.EntregadoresGateway = EntregadoresGateway;
@@ -77,10 +68,30 @@ __decorate([
     __metadata("design:type", socket_io_1.Server)
 ], EntregadoresGateway.prototype, "server", void 0);
 __decorate([
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], EntregadoresGateway.prototype, "handleConnection", null);
+__decorate([
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], EntregadoresGateway.prototype, "handleDisconnect", null);
+__decorate([
+    (0, websockets_1.SubscribeMessage)('atualizarLocalizacao'),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
+    __param(1, (0, websockets_1.MessageBody)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], EntregadoresGateway.prototype, "handleLocationUpdate", null);
+__decorate([
     (0, websockets_1.SubscribeMessage)('joinDeliveryRoom'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [socket_io_1.Socket, String]),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", void 0)
 ], EntregadoresGateway.prototype, "handleJoinDeliveryRoom", null);
 __decorate([
     (0, websockets_1.SubscribeMessage)('leaveDeliveryRoom'),
@@ -88,17 +99,10 @@ __decorate([
     __metadata("design:paramtypes", [socket_io_1.Socket, String]),
     __metadata("design:returntype", void 0)
 ], EntregadoresGateway.prototype, "handleLeaveDeliveryRoom", null);
-__decorate([
-    (0, websockets_1.SubscribeMessage)('enviarLocalizacao'),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [socket_io_1.Socket, Object]),
-    __metadata("design:returntype", Promise)
-], EntregadoresGateway.prototype, "handleLocationUpdate", null);
 exports.EntregadoresGateway = EntregadoresGateway = EntregadoresGateway_1 = __decorate([
+    (0, common_1.UseGuards)(ws_auth_guard_1.WsAuthGuard),
     (0, websockets_1.WebSocketGateway)({ cors: true }),
-    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => entregas_service_1.EntregasService))),
-    __metadata("design:paramtypes", [entregadores_service_1.EntregadoresService,
-        entregas_service_1.EntregasService,
-        jwt_1.JwtService])
+    __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => entregas_service_1.EntregasService))),
+    __metadata("design:paramtypes", [entregas_service_1.EntregasService])
 ], EntregadoresGateway);
 //# sourceMappingURL=entregadores.gateway.js.map

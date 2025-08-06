@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LojaSchema = exports.Loja = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
-const delivery_schema_1 = require("../../entregas/schemas/delivery.schema");
 let Loja = class Loja extends mongoose_2.Document {
 };
 exports.Loja = Loja;
@@ -25,11 +24,22 @@ __decorate([
     __metadata("design:type", String)
 ], Loja.prototype, "endereco", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: true, type: delivery_schema_1.CoordinatesSchema }),
-    __metadata("design:type", delivery_schema_1.Coordinates)
+    (0, mongoose_1.Prop)({
+        type: {
+            type: String,
+            enum: ['Point'],
+            required: true,
+        },
+        coordinates: {
+            type: [Number],
+            required: true,
+        }
+    }),
+    __metadata("design:type", Object)
 ], Loja.prototype, "coordenadas", void 0);
 exports.Loja = Loja = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Loja);
-exports.LojaSchema = mongoose_1.SchemaFactory.createForClass(Loja);
+exports.LojaSchema = mongoose_1.SchemaFactory.createForClass(Loja)
+    .index({ coordenadas: '2dsphere' });
 //# sourceMappingURL=loja.schema.js.map

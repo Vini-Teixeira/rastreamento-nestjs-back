@@ -54,7 +54,7 @@ exports.Location = Location = __decorate([
     (0, mongoose_1.Schema)({ _id: false })
 ], Location);
 exports.LocationSchema = mongoose_1.SchemaFactory.createForClass(Location);
-let Delivery = class Delivery extends mongoose_2.Document {
+let Delivery = class Delivery {
 };
 exports.Delivery = Delivery;
 __decorate([

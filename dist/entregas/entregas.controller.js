@@ -20,27 +20,33 @@ const update_delivery_dto_1 = require("./dto/update-delivery.dto");
 const delivery_schema_1 = require("./schemas/delivery.schema");
 const firebase_auth_guard_1 = require("../auth/firebase-auth/firebase-auth.guard");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const passport_1 = require("@nestjs/passport");
+class SyncLocationDto {
+}
 let EntregasController = class EntregasController {
     constructor(entregasService) {
         this.entregasService = entregasService;
     }
+    async syncLocations(syncLocationDto, req) {
+        const driverId = req.user.sub;
+        this.entregasService.bulkUpdateDriverLocations(driverId, syncLocationDto.locations);
+        return { message: 'Localizações sincronizadas com sucesso!' };
+    }
     async findMyDeliveries(request) {
         const driver = request.user;
-        if (!driver || !driver._id) {
+        if (!driver || !driver.sub) {
             throw new common_1.NotFoundException('ID do entregador não encontrado no token.');
         }
-        return this.entregasService.findAllByDriverId(driver._id);
+        return this.entregasService.findAllByDriverId(driver.sub);
     }
     async findDeliveryDetailsForDriver(id, request) {
         const delivery = await this.entregasService.findOne(id);
-        if (!delivery) {
+        if (!delivery)
             throw new common_1.NotFoundException(`Entrega com ID "${id}" não encontrada.`);
-        }
         const driver = request.user;
-        if (!delivery.driverId) {
+        if (!delivery.driverId)
             throw new common_1.UnauthorizedException('Esta entrega não está atribuída a nenhum entregador.');
-        }
-        if (delivery.driverId._id.toString() !== driver._id.toString()) {
+        if (delivery.driverId._id.toString() !== driver.sub.toString()) {
             throw new common_1.UnauthorizedException('Você não tem permissão para ver os detalhes desta entrega.');
         }
         return delivery;
@@ -50,12 +56,13 @@ let EntregasController = class EntregasController {
         const driver = request.user;
         if (!delivery)
             throw new common_1.NotFoundException('Entrega não encontrada.');
-        if (!delivery.driverId || delivery.driverId._id.toString() !== driver._id.toString()) {
+        if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
             throw new common_1.UnauthorizedException('Você não tem permissão para ver a rota desta entrega.');
         }
         let originCoords;
         let destinationCoords;
-        if (delivery.status.toUpperCase() === 'ON_THE_WAY' && delivery.driverCurrentLocation) {
+        if (delivery.status.toUpperCase() === 'ON_THE_WAY' &&
+            delivery.driverCurrentLocation) {
             originCoords = delivery.driverCurrentLocation;
             destinationCoords = delivery.destination.coordinates;
         }
@@ -71,7 +78,7 @@ let EntregasController = class EntregasController {
         const driver = request.user;
         if (!delivery)
             throw new common_1.NotFoundException('Entrega não encontrada.');
-        if (!delivery.driverId || delivery.driverId._id.toString() !== driver._id.toString()) {
+        if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
             throw new common_1.UnauthorizedException('Você não tem permissão para modificar esta entrega.');
         }
         if (delivery.status !== delivery_schema_1.DeliveryStatus.PENDING) {
@@ -84,26 +91,30 @@ let EntregasController = class EntregasController {
         const driver = request.user;
         if (!delivery)
             throw new common_1.NotFoundException('Entrega não encontrada.');
-        if (!delivery.driverId || delivery.driverId._id.toString() !== driver._id.toString()) {
+        if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
             throw new common_1.UnauthorizedException('Você não tem permissão para modificar esta entrega.');
         }
         if (delivery.status !== delivery_schema_1.DeliveryStatus.ACCEPTED) {
             throw new common_1.ForbiddenException('Apenas entregas com status "accepted" podem ser coletadas.');
         }
-        return this.entregasService.update(id, { status: delivery_schema_1.DeliveryStatus.ON_THE_WAY });
+        return this.entregasService.update(id, {
+            status: delivery_schema_1.DeliveryStatus.ON_THE_WAY,
+        });
     }
     async finishDelivery(id, request) {
         const delivery = await this.entregasService.findOne(id);
         const driver = request.user;
         if (!delivery)
             throw new common_1.NotFoundException('Entrega não encontrada.');
-        if (!delivery.driverId || delivery.driverId._id.toString() !== driver._id.toString()) {
+        if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
             throw new common_1.UnauthorizedException('Você não tem permissão para modificar esta entrega.');
         }
         if (delivery.status !== delivery_schema_1.DeliveryStatus.ON_THE_WAY) {
             throw new common_1.ForbiddenException('Apenas entregas "a caminho" podem ser finalizadas.');
         }
-        return this.entregasService.update(id, { status: delivery_schema_1.DeliveryStatus.DELIVERED });
+        return this.entregasService.update(id, {
+            status: delivery_schema_1.DeliveryStatus.DELIVERED,
+        });
     }
     async create(createDeliveryDto) {
         return this.entregasService.create(createDeliveryDto);
@@ -151,8 +162,17 @@ let EntregasController = class EntregasController {
 };
 exports.EntregasController = EntregasController;
 __decorate([
-    (0, common_1.Get)('minhas-entregas'),
+    (0, common_1.Post)('localizacoes/sync'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [SyncLocationDto, Object]),
+    __metadata("design:returntype", Promise)
+], EntregasController.prototype, "syncLocations", null);
+__decorate([
+    (0, common_1.Get)('minhas-entregas'),
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
