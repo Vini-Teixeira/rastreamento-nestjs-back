@@ -1,5 +1,6 @@
 serviceAccountKey.json
 node_modules
 .env
+.env.prod
 !pubspec.lock
 *.json
