@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
+const request_logger_middleware_1 = require("./common/middleware/request-logger.middleware");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
 const entregadores_module_1 = require("./entregadores/entregadores.module");
@@ -19,8 +20,12 @@ const google_maps_service_1 = require("./google-maps/google-maps.service");
 const auth_module_1 = require("./auth/auth.module");
 const lojas_module_1 = require("./lojas/lojas.module");
 const lojistas_module_1 = require("./lojistas/lojistas.module");
+const firebase_module_1 = require("./auth/firebase.module");
 const geocoding_controller_1 = require("./geocoding/geocoding.controller");
 let AppModule = class AppModule {
+    configure(consumer) {
+        consumer.apply(request_logger_middleware_1.RequestLoggerMiddleware).forRoutes('*');
+    }
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
@@ -42,6 +47,7 @@ exports.AppModule = AppModule = __decorate([
             auth_module_1.AuthModule,
             lojas_module_1.LojasModule,
             lojistas_module_1.LojistasModule,
+            firebase_module_1.FirebaseModule
         ],
         controllers: [app_controller_1.AppController, geocoding_controller_1.GeocodingController],
         providers: [app_service_1.AppService, google_maps_service_1.GoogleMapsService],

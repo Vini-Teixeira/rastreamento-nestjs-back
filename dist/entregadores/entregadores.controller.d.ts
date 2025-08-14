@@ -1,3 +1,4 @@
+import { Request } from 'express';
 import { EntregadoresService } from './entregadores.service';
 import { AuthService } from 'src/auth/auth.service';
 import { DriverLoginDto } from 'src/auth/dto/driver-login.dto';
@@ -11,7 +12,7 @@ export declare class EntregadoresController {
     login(driverLoginDto: DriverLoginDto): Promise<{
         access_token: string;
     }>;
-    updateMyLocation(req: any, updateLocationDto: UpdateLocationDto): Promise<import("mongoose").Document<unknown, {}, import("./schemas/entregador.schema").Entregador, {}> & import("./schemas/entregador.schema").Entregador & {
+    updateMyLocation(req: Request, updateLocationDto: UpdateLocationDto): Promise<import("mongoose").Document<unknown, {}, import("./schemas/entregador.schema").Entregador, {}> & import("./schemas/entregador.schema").Entregador & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
@@ -26,19 +27,17 @@ export declare class EntregadoresController {
     } & {
         __v: number;
     })[]>;
-    findOne(id: string): Promise<(import("mongoose").Document<unknown, {}, import("./schemas/entregador.schema").Entregador, {}> & import("./schemas/entregador.schema").Entregador & {
+    findOne(id: string): Promise<import("mongoose").Document<unknown, {}, import("./schemas/entregador.schema").Entregador, {}> & import("./schemas/entregador.schema").Entregador & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }) | null>;
-    update(id: string, updateEntregadorDto: UpdateEntregadorDto): Promise<(import("mongoose").Document<unknown, {}, import("./schemas/entregador.schema").Entregador, {}> & import("./schemas/entregador.schema").Entregador & {
+    }>;
+    update(id: string, updateEntregadorDto: UpdateEntregadorDto): Promise<import("mongoose").Document<unknown, {}, import("./schemas/entregador.schema").Entregador, {}> & import("./schemas/entregador.schema").Entregador & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }) | null>;
-    delete(id: string): Promise<(import("mongoose").Document<unknown, {}, import("./schemas/entregador.schema").Entregador, {}> & import("./schemas/entregador.schema").Entregador & {
-        _id: import("mongoose").Types.ObjectId;
-    } & {
-        __v: number;
-    }) | null>;
+    }>;
+    delete(id: string): Promise<{
+        message: string;
+    }>;
 }

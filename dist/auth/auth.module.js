@@ -10,12 +10,9 @@ exports.AuthModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const auth_service_1 = require("./auth.service");
-const auth_controller_1 = require("./auth.controller");
 const jwt_1 = require("@nestjs/jwt");
 const jwt_strategy_1 = require("./jwt.strategy");
 const passport_1 = require("@nestjs/passport");
-const lojistas_module_1 = require("../lojistas/lojistas.module");
-const entregadores_module_1 = require("../entregadores/entregadores.module");
 const jwt_auth_guard_1 = require("./jwt-auth.guard");
 const ws_auth_guard_1 = require("./guards/ws-auth.guard");
 let AuthModule = class AuthModule {
@@ -33,17 +30,10 @@ exports.AuthModule = AuthModule = __decorate([
                     signOptions: { expiresIn: '7d' },
                 }),
             }),
-            lojistas_module_1.LojistasModule,
-            entregadores_module_1.EntregadoresModule,
         ],
-        controllers: [auth_controller_1.AuthController],
-        providers: [
-            auth_service_1.AuthService,
-            jwt_strategy_1.JwtStrategy,
-            jwt_auth_guard_1.JwtAuthGuard,
-            ws_auth_guard_1.WsAuthGuard,
-        ],
-        exports: [passport_1.PassportModule, auth_service_1.AuthService, jwt_auth_guard_1.JwtAuthGuard, ws_auth_guard_1.WsAuthGuard],
+        controllers: [],
+        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy, jwt_auth_guard_1.JwtAuthGuard, ws_auth_guard_1.WsAuthGuard],
+        exports: [auth_service_1.AuthService, passport_1.PassportModule, jwt_1.JwtModule, jwt_auth_guard_1.JwtAuthGuard, ws_auth_guard_1.WsAuthGuard],
     })
 ], AuthModule);
 //# sourceMappingURL=auth.module.js.map

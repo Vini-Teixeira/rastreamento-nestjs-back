@@ -15,12 +15,14 @@ const auth_module_1 = require("../auth/auth.module");
 const google_maps_module_1 = require("../google-maps/google-maps.module");
 const entregadores_module_1 = require("../entregadores/entregadores.module");
 const delivery_schema_1 = require("./schemas/delivery.schema");
+const firebase_module_1 = require("../auth/firebase.module");
 let EntregasModule = class EntregasModule {
 };
 exports.EntregasModule = EntregasModule;
 exports.EntregasModule = EntregasModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            firebase_module_1.FirebaseModule,
             mongoose_1.MongooseModule.forFeature([
                 { name: delivery_schema_1.Delivery.name, schema: delivery_schema_1.DeliverySchema }
             ]),

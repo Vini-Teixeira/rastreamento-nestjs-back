@@ -12,12 +12,16 @@ const mongoose_1 = require("@nestjs/mongoose");
 const lojistas_service_1 = require("./lojistas.service");
 const lojistas_controller_1 = require("./lojistas.controller");
 const lojista_schema_1 = require("./schemas/lojista.schema");
+const jwt_1 = require("@nestjs/jwt");
+const auth_module_1 = require("../auth/auth.module");
 let LojistasModule = class LojistasModule {
 };
 exports.LojistasModule = LojistasModule;
 exports.LojistasModule = LojistasModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            auth_module_1.AuthModule,
+            jwt_1.JwtModule,
             mongoose_1.MongooseModule.forFeature([{ name: lojista_schema_1.Lojista.name, schema: lojista_schema_1.LojistaSchema }]),
         ],
         controllers: [lojistas_controller_1.LojistasController],

@@ -40,7 +40,7 @@ __decorate([
     __metadata("design:type", Object)
 ], Entregador.prototype, "localizacao", void 0);
 exports.Entregador = Entregador = __decorate([
-    (0, mongoose_1.Schema)({ timestamps: true })
+    (0, mongoose_1.Schema)({ timestamps: true, collection: 'entregadores' })
 ], Entregador);
 exports.EntregadorSchema = mongoose_1.SchemaFactory.createForClass(Entregador)
     .index({ localizacao: '2dsphere' });

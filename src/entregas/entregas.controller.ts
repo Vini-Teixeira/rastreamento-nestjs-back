@@ -13,6 +13,9 @@ import {
 import { FirebaseAuthGuard } from 'src/auth/firebase-auth/firebase-auth.guard';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { AuthGuard } from '@nestjs/passport';
+import { Logger } from '@nestjs/common';
+
+const logger = new Logger('EntregasController');
 
 class SyncLocationDto {
   locations: {
@@ -30,9 +33,10 @@ export class EntregasController {
   @Post('localizacoes/sync')
   @UseGuards(JwtAuthGuard) 
   async syncLocations(@Body() syncLocationDto: SyncLocationDto, @Req() req) {
-    const driverId = req.user.sub;
-    this.entregasService.bulkUpdateDriverLocations(driverId, syncLocationDto.locations);
-    return { message: 'Localizações sincronizadas com sucesso!' };
+    const user = (req as any).user;
+    logger.debug(`Handler <NOME> → req.user: ${user ? JSON.stringify({sub: user.sub}) : 'none'}`);
+    if (!user?.sub) throw new UnauthorizedException('Token inválido ou ausente');
+
   }
 
   // --- ROTAS PARA ENTREGADORES (Protegidas por JWT) ---

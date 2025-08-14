@@ -13,12 +13,14 @@ const lojas_service_1 = require("./lojas.service");
 const lojas_controller_1 = require("./lojas.controller");
 const loja_schema_1 = require("./schemas/loja.schema");
 const auth_module_1 = require("../auth/auth.module");
+const firebase_module_1 = require("../auth/firebase.module");
 let LojasModule = class LojasModule {
 };
 exports.LojasModule = LojasModule;
 exports.LojasModule = LojasModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            firebase_module_1.FirebaseModule,
             mongoose_1.MongooseModule.forFeature([{ name: loja_schema_1.Loja.name, schema: loja_schema_1.LojaSchema }]),
             auth_module_1.AuthModule,
         ],

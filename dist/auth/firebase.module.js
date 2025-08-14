@@ -17,7 +17,7 @@ exports.FirebaseModule = FirebaseModule = __decorate([
     (0, common_1.Module)({
         imports: [config_1.ConfigModule],
         providers: [firebase_admin_provider_1.FirebaseAdminProvider],
-        exports: [firebase_admin_provider_1.FirebaseAdminProvider],
+        exports: [firebase_admin_provider_1.FIREBASE_ADMIN],
     })
 ], FirebaseModule);
 //# sourceMappingURL=firebase.module.js.map

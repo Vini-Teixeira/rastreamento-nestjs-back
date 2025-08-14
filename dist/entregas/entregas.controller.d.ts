@@ -14,9 +14,7 @@ declare class SyncLocationDto {
 export declare class EntregasController {
     private readonly entregasService;
     constructor(entregasService: EntregasService);
-    syncLocations(syncLocationDto: SyncLocationDto, req: any): Promise<{
-        message: string;
-    }>;
+    syncLocations(syncLocationDto: SyncLocationDto, req: any): Promise<void>;
     findMyDeliveries(request: Request): Promise<(import("mongoose").Document<unknown, {}, Delivery, {}> & Delivery & {
         _id: import("mongoose").Types.ObjectId;
     } & {

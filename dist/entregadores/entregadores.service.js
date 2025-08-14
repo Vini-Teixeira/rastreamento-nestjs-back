@@ -18,6 +18,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const entregador_schema_1 = require("./schemas/entregador.schema");
 const bcrypt = require("bcrypt");
+const logger = new common_1.Logger('EntregadoresService');
 let EntregadoresService = class EntregadoresService {
     constructor(entregadorModel) {
         this.entregadorModel = entregadorModel;
@@ -51,14 +52,17 @@ let EntregadoresService = class EntregadoresService {
     }
     async updateLocation(driverId, updateLocationDto) {
         const { lat, lng } = updateLocationDto;
+        logger.log(`updateLocation -> driverId: ${driverId} | lat:${lat} lng:${lng}`);
         const geoJsonPoint = {
             type: 'Point',
             coordinates: [lng, lat],
         };
         const updatedDriver = await this.entregadorModel.findByIdAndUpdate(driverId, { $set: { localizacao: geoJsonPoint } }, { new: true }).exec();
         if (!updatedDriver) {
+            logger.warn(`Entregador não encontrado (id: ${driverId}) ao tentar atualizar localização.`);
             throw new common_1.NotFoundException(`Entregador com ID ${driverId} não encontrado.`);
         }
+        logger.log(`updateLocation -> sucesso para entregador ${driverId}`);
         return updatedDriver;
     }
 };

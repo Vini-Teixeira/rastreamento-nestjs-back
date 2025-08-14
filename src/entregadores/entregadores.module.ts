@@ -6,6 +6,7 @@ import { EntregadoresController } from './entregadores.controller';
 import { EntregadoresGateway } from './entregadores.gateway';
 import { Entregador, EntregadorSchema } from './schemas/entregador.schema';
 import { AuthModule } from 'src/auth/auth.module';
+import { FirebaseModule } from 'src/auth/firebase.module';
 
 const EntregadorMongooseModule = MongooseModule.forFeature([
   { name: Entregador.name, schema: EntregadorSchema }
@@ -13,6 +14,7 @@ const EntregadorMongooseModule = MongooseModule.forFeature([
 
 @Module({
   imports: [
+    FirebaseModule,
     EntregadorMongooseModule,
     forwardRef(() => EntregasModule),
     AuthModule,

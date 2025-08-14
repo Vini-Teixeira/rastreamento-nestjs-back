@@ -13,27 +13,26 @@ exports.JwtStrategy = void 0;
 const common_1 = require("@nestjs/common");
 const passport_1 = require("@nestjs/passport");
 const passport_jwt_1 = require("passport-jwt");
-const config_1 = require("@nestjs/config");
 let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy) {
-    constructor(configService) {
-        const jwtSecret = configService.get('JWT_SECRET');
-        if (!jwtSecret) {
-            throw new Error('A variável de ambiente JWT_SECRET não está definida.');
-        }
+    constructor() {
         super({
             jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
-            secretOrKey: jwtSecret
+            secretOrKey: process.env.JWT_SECRET || 'defaultSecret',
         });
-        this.configService = configService;
     }
     async validate(payload) {
-        return { sub: payload.sub, telefone: payload.telefone };
+        console.log('✅ JWT Payload recebido no JwtStrategy.validate():', payload);
+        return {
+            sub: payload.sub,
+            telefone: payload.telefone ?? null,
+            email: payload.email ?? null,
+        };
     }
 };
 exports.JwtStrategy = JwtStrategy;
 exports.JwtStrategy = JwtStrategy = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [config_1.ConfigService])
+    __metadata("design:paramtypes", [])
 ], JwtStrategy);
 //# sourceMappingURL=jwt.strategy.js.map

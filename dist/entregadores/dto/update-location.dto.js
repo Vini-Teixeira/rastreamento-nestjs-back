@@ -11,17 +11,20 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdateLocationDto = void 0;
 const class_validator_1 = require("class-validator");
+const class_transformer_1 = require("class-transformer");
 class UpdateLocationDto {
 }
 exports.UpdateLocationDto = UpdateLocationDto;
 __decorate([
     (0, class_validator_1.IsNotEmpty)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsLatitude)(),
     __metadata("design:type", Number)
 ], UpdateLocationDto.prototype, "lat", void 0);
 __decorate([
     (0, class_validator_1.IsNotEmpty)(),
-    (0, class_validator_1.IsLatitude)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsLongitude)(),
     __metadata("design:type", Number)
 ], UpdateLocationDto.prototype, "lng", void 0);
 //# sourceMappingURL=update-location.dto.js.map

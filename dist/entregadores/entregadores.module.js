@@ -15,6 +15,7 @@ const entregadores_controller_1 = require("./entregadores.controller");
 const entregadores_gateway_1 = require("./entregadores.gateway");
 const entregador_schema_1 = require("./schemas/entregador.schema");
 const auth_module_1 = require("../auth/auth.module");
+const firebase_module_1 = require("../auth/firebase.module");
 const EntregadorMongooseModule = mongoose_1.MongooseModule.forFeature([
     { name: entregador_schema_1.Entregador.name, schema: entregador_schema_1.EntregadorSchema }
 ]);
@@ -24,6 +25,7 @@ exports.EntregadoresModule = EntregadoresModule;
 exports.EntregadoresModule = EntregadoresModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            firebase_module_1.FirebaseModule,
             EntregadorMongooseModule,
             (0, common_1.forwardRef)(() => entregas_module_1.EntregasModule),
             auth_module_1.AuthModule,

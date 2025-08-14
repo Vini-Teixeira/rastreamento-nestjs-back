@@ -2,7 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 
-@Schema({timestamps: true})
+@Schema({timestamps: true, collection: 'entregadores'})
 export class Entregador {
   @Prop({ required: true })
   nome: string;

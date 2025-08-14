@@ -13,26 +13,28 @@ exports.WsAuthGuard = void 0;
 const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
 const websockets_1 = require("@nestjs/websockets");
+const logger = new common_1.Logger('WsAuthGuard');
 let WsAuthGuard = class WsAuthGuard {
     constructor(jwtService) {
         this.jwtService = jwtService;
     }
     async canActivate(context) {
+        const client = context.switchToWs().getClient();
         try {
-            const client = context.switchToWs().getClient();
-            const authToken = client.handshake.auth.token;
-            if (!authToken) {
-                throw new websockets_1.WsException('Token de autenticação não fornecido.');
-            }
-            const payload = await this.jwtService.verifyAsync(authToken, {
-                secret: process.env.JWT_SECRET,
-            });
-            client.user = payload;
+            const token = client.handshake?.auth?.token || (client.handshake?.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+            logger.debug(`WsAuthGuard → handshake.auth.token present: ${!!token}`);
+            if (!token)
+                throw new websockets_1.WsException('Token ausente');
+            const payload = await this.jwtService.verifyAsync(token, { secret: process.env.JWT_SECRET });
+            client.data = client.data || {};
+            client.data.user = payload;
+            logger.log(`WsAuthGuard → client ${client.id} authenticated as ${payload.sub}`);
+            return true;
         }
         catch (err) {
+            logger.warn('WsAuthGuard → auth failed', err);
             throw new websockets_1.WsException('Token inválido ou expirado');
         }
-        return true;
     }
 };
 exports.WsAuthGuard = WsAuthGuard;

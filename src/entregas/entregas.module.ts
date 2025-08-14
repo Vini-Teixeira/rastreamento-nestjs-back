@@ -6,9 +6,11 @@ import { AuthModule } from 'src/auth/auth.module';
 import { GoogleMapsModule } from 'src/google-maps/google-maps.module';
 import { EntregadoresModule } from 'src/entregadores/entregadores.module';
 import { Delivery, DeliverySchema } from './schemas/delivery.schema';
+import { FirebaseModule } from 'src/auth/firebase.module';
 
 @Module({
   imports: [
+    FirebaseModule,
     MongooseModule.forFeature([
       { name: Delivery.name, schema: DeliverySchema }
     ]),

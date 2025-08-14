@@ -21,6 +21,8 @@ const delivery_schema_1 = require("./schemas/delivery.schema");
 const firebase_auth_guard_1 = require("../auth/firebase-auth/firebase-auth.guard");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const passport_1 = require("@nestjs/passport");
+const common_2 = require("@nestjs/common");
+const logger = new common_2.Logger('EntregasController');
 class SyncLocationDto {
 }
 let EntregasController = class EntregasController {
@@ -28,9 +30,10 @@ let EntregasController = class EntregasController {
         this.entregasService = entregasService;
     }
     async syncLocations(syncLocationDto, req) {
-        const driverId = req.user.sub;
-        this.entregasService.bulkUpdateDriverLocations(driverId, syncLocationDto.locations);
-        return { message: 'Localizações sincronizadas com sucesso!' };
+        const user = req.user;
+        logger.debug(`Handler <NOME> → req.user: ${user ? JSON.stringify({ sub: user.sub }) : 'none'}`);
+        if (!user?.sub)
+            throw new common_1.UnauthorizedException('Token inválido ou ausente');
     }
     async findMyDeliveries(request) {
         const driver = request.user;

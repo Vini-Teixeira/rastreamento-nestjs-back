@@ -17,13 +17,25 @@ let AuthService = class AuthService {
         this.jwtService = jwtService;
     }
     async loginDriver(driver) {
-        const payload = { sub: driver._id, telefone: driver.telefone };
+        if (!driver?._id || !driver?.telefone) {
+            throw new common_1.UnauthorizedException('Dados do entregador incompletos para geração do token.');
+        }
+        const payload = {
+            sub: String(driver._id),
+            telefone: String(driver.telefone),
+        };
         return {
             access_token: this.jwtService.sign(payload),
         };
     }
     async loginLojista(lojista) {
-        const payload = { sub: lojista._id, email: lojista.email, type: 'lojista' };
+        if (!lojista?._id || !lojista?.email) {
+            throw new common_1.UnauthorizedException('Dados do lojista incompletos para geração do token.');
+        }
+        const payload = {
+            sub: String(lojista._id),
+            email: String(lojista.email),
+        };
         return {
             access_token: this.jwtService.sign(payload),
         };
