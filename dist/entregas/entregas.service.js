@@ -1,0 +1,264 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var EntregasService_1;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.EntregasService = void 0;
+const common_1 = require("@nestjs/common");
+const mongoose_1 = require("@nestjs/mongoose");
+const mongoose_2 = require("mongoose");
+const delivery_schema_1 = require("./schemas/delivery.schema");
+const entregador_schema_1 = require("../entregadores/schemas/entregador.schema");
+const google_maps_service_1 = require("../google-maps/google-maps.service");
+const entregadores_gateway_1 = require("../entregadores/entregadores.gateway");
+class LocationPointDto {
+}
+let EntregasService = EntregasService_1 = class EntregasService {
+    constructor(deliveryModel, entregadorModel, googleMapsService, entregadoresGateway) {
+        this.deliveryModel = deliveryModel;
+        this.entregadorModel = entregadorModel;
+        this.googleMapsService = googleMapsService;
+        this.entregadoresGateway = entregadoresGateway;
+        this.logger = new common_1.Logger(EntregasService_1.name);
+    }
+    async create(createDeliveryDto) {
+        const { origin, destination } = createDeliveryDto;
+        const nearestDriverInfo = await this._findNearestDriverInfo(origin.coordinates);
+        if (!nearestDriverInfo) {
+            this.logger.warn(`Nenhum entregador disponível encontrado perto das coordenadas: ${JSON.stringify(origin.coordinates)}`);
+            throw new common_1.NotFoundException('Nenhum entregador disponível foi encontrado.');
+        }
+        const nearestDriver = await this.entregadorModel
+            .findById(nearestDriverInfo._id)
+            .exec();
+        if (!nearestDriver) {
+            throw new common_1.NotFoundException(`Entregador com ID ${nearestDriverInfo._id} não foi encontrado no banco.`);
+        }
+        this.logger.log(`Entregador mais próximo encontrado: ${nearestDriver.nome}`);
+        let destinationCoordinates;
+        try {
+            destinationCoordinates = await this.googleMapsService.geocodeAddress(destination.address);
+        }
+        catch (error) {
+            this.logger.error(`Falha no geocoding para o endereço: ${destination.address}`, error.stack);
+            throw new common_1.BadRequestException('O endereço de destino não pôde ser encontrado. Por favor, verifique e tente novamente.');
+        }
+        const newDelivery = new this.deliveryModel({
+            ...createDeliveryDto,
+            destination: {
+                address: destination.address,
+                coordinates: destinationCoordinates,
+            },
+            driverId: nearestDriver._id,
+            status: delivery_schema_1.DeliveryStatus.PENDING,
+        });
+        this.entregadoresGateway.notifyNewDelivery(nearestDriver._id.toString(), newDelivery);
+        this.logger.log(`Notificação de nova entrega enviada para o entregador ${nearestDriver._id}`);
+        return newDelivery.save();
+    }
+    async _findNearestDriverInfo(originCoordinates) {
+        const { lat, lng } = originCoordinates;
+        const drivers = await this.entregadorModel.aggregate([
+            {
+                $geoNear: {
+                    near: {
+                        type: 'Point',
+                        coordinates: [lng, lat],
+                    },
+                    distanceField: 'distanciaCalculada',
+                    query: { ativo: true, emEntrega: false },
+                    spherical: true,
+                },
+            },
+            { $limit: 1 },
+        ]);
+        return drivers.length > 0 ? drivers[0] : null;
+    }
+    async findFilteredAndPaginated(statuses, page = 1, limit = 8) {
+        const skip = (page - 1) * limit;
+        const query = (statuses && statuses.length > 0) ? { status: { $in: statuses } } : {};
+        try {
+            const [deliveries, total] = await Promise.all([
+                this.deliveryModel
+                    .find(query)
+                    .populate('driverId')
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limit)
+                    .exec(),
+                this.deliveryModel.countDocuments(query).exec(),
+            ]);
+            return { deliveries, total, page, limit };
+        }
+        catch (error) {
+            this.logger.error('Falha ao buscar entregas paginadas', error.stack);
+            return { deliveries: [], total: 0, page, limit };
+        }
+    }
+    async findOne(id) {
+        const delivery = await this.deliveryModel
+            .findById(id)
+            .populate('driverId')
+            .exec();
+        if (!delivery) {
+            throw new common_1.NotFoundException(`Entrega com ID "${id}" não encontrada.`);
+        }
+        return delivery;
+    }
+    async update(id, updateDeliveryDto) {
+        const existingDelivery = await this.deliveryModel.findById(id).exec();
+        if (!existingDelivery) {
+            throw new common_1.NotFoundException(`Entrega com ID "${id}" não encontrada para atualização.`);
+        }
+        if (updateDeliveryDto.status) {
+            existingDelivery.status = updateDeliveryDto.status;
+        }
+        if (updateDeliveryDto.driverId) {
+            existingDelivery.driverId = new mongoose_2.Types.ObjectId(updateDeliveryDto.driverId);
+        }
+        if (updateDeliveryDto.itemDescription) {
+            existingDelivery.itemDescription = updateDeliveryDto.itemDescription;
+        }
+        if (updateDeliveryDto.routeHistory) {
+            existingDelivery.routeHistory = updateDeliveryDto.routeHistory.map((coordDto) => ({
+                lat: coordDto.lat,
+                lng: coordDto.lng,
+                timestamp: coordDto.timestamp ?? new Date(),
+            }));
+        }
+        if (updateDeliveryDto.driverCurrentLocation) {
+            existingDelivery.driverCurrentLocation = {
+                lat: updateDeliveryDto.driverCurrentLocation.lat,
+                lng: updateDeliveryDto.driverCurrentLocation.lng,
+                timestamp: updateDeliveryDto.driverCurrentLocation.timestamp ?? new Date(),
+            };
+        }
+        return existingDelivery.save();
+    }
+    async delete(id) {
+        const result = await this.deliveryModel.deleteOne({ _id: id }).exec();
+        if (result.deletedCount === 0) {
+            throw new common_1.NotFoundException(`Entrega com ID "${id}" não encontrada para exclusão.`);
+        }
+        return { message: 'Entrega excluída com sucesso!' };
+    }
+    async findAllByDriverId(driverId) {
+        return this.deliveryModel.find({ driverId }).exec();
+    }
+    async addRoutePoint(deliveryId, lat, lng) {
+        const delivery = await this.deliveryModel.findById(deliveryId).exec();
+        if (!delivery) {
+            throw new common_1.NotFoundException(`Entrega com ID "${deliveryId}" não encontrada para adicionar ponto de rota.`);
+        }
+        if (!delivery.routeHistory) {
+            delivery.routeHistory = [];
+        }
+        delivery.routeHistory.push({ lat, lng, timestamp: new Date() });
+        return delivery.save();
+    }
+    async updateDriverLocation(deliveryId, lat, lng) {
+        const delivery = await this.deliveryModel.findById(deliveryId).exec();
+        if (!delivery) {
+            throw new common_1.NotFoundException(`Entrega com ID "${deliveryId}" não encontrada para atualizar localização do entregador.`);
+        }
+        delivery.driverCurrentLocation = {
+            lat,
+            lng,
+            timestamp: new Date(),
+        };
+        const updatedDelivery = await delivery.save();
+        this.entregadoresGateway.server.to(deliveryId).emit('novaLocalizacao', {
+            deliveryId,
+            driverId: updatedDelivery.driverId
+                ? updatedDelivery.driverId.toString()
+                : null,
+            lat,
+            lng,
+            timestamp: updatedDelivery.driverCurrentLocation?.timestamp?.toISOString(),
+        });
+        this.logger.log(`WS Service: Localização da entrega ${deliveryId} transmitida para sala: ${lat}, ${lng}`);
+        return updatedDelivery;
+    }
+    async getSnappedRoutePolyline(origin, destination) {
+        return this.googleMapsService.getDirections(origin, destination);
+    }
+    async getDriverToDestinationPolyline(driverLocation, destination) {
+        return this.googleMapsService.getDirections(driverLocation, destination);
+    }
+    async bulkUpdateDriverLocations(driverId, locations) {
+        this.logger.log(`Sincronizando ${locations.length} pontos de localização para o entregador ${driverId}`);
+        const locationsByDelivery = new Map();
+        for (const loc of locations) {
+            if (!locationsByDelivery.has(loc.deliveryId)) {
+                locationsByDelivery.set(loc.deliveryId, []);
+            }
+            locationsByDelivery.get(loc.deliveryId).push(loc);
+        }
+        for (const [deliveryId, points] of locationsByDelivery.entries()) {
+            try {
+                const delivery = await this.deliveryModel.findById(deliveryId);
+                if (!delivery) {
+                    this.logger.warn(`Sync: Entrega com ID ${deliveryId} não encontrada.`);
+                    continue;
+                }
+                if (!delivery.driverId) {
+                    this.logger.error(`Sync: A entrega ${deliveryId} não possui um entregador associado.`);
+                    continue;
+                }
+                if (delivery.driverId._id.toString() !== driverId) {
+                    this.logger.error(`Sync: Ação não autorizada. Entregador ${driverId} tentando atualizar entrega ${deliveryId}`);
+                    continue;
+                }
+                points.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                const routePointsToAdd = points.map(p => ({
+                    lat: p.lat,
+                    lng: p.lng,
+                    timestamp: p.timestamp,
+                }));
+                if (!delivery.routeHistory) {
+                    delivery.routeHistory = [];
+                }
+                delivery.routeHistory.push(...routePointsToAdd);
+                const latestPoint = points[points.length - 1];
+                delivery.driverCurrentLocation = {
+                    lat: latestPoint.lat,
+                    lng: latestPoint.lng,
+                    timestamp: latestPoint.timestamp,
+                };
+                await delivery.save();
+                this.entregadoresGateway.server.to(deliveryId).emit('novaLocalizacao', {
+                    deliveryId,
+                    driverId,
+                    lat: latestPoint.lat,
+                    lng: latestPoint.lng,
+                    timestamp: latestPoint.timestamp.toISOString(),
+                });
+            }
+            catch (error) {
+                this.logger.error(`Erro ao sincronizar pontos para a entrega ${deliveryId}: ${error.message}`);
+            }
+        }
+    }
+};
+exports.EntregasService = EntregasService;
+exports.EntregasService = EntregasService = EntregasService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(delivery_schema_1.Delivery.name)),
+    __param(1, (0, mongoose_1.InjectModel)(entregador_schema_1.Entregador.name)),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => entregadores_gateway_1.EntregadoresGateway))),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model,
+        google_maps_service_1.GoogleMapsService,
+        entregadores_gateway_1.EntregadoresGateway])
+], EntregasService);
+//# sourceMappingURL=entregas.service.js.map
