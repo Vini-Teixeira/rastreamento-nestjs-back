@@ -18,17 +18,96 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const bcrypt = require("bcrypt");
 const lojista_schema_1 = require("./schemas/lojista.schema");
+const google_maps_service_1 = require("../google-maps/google-maps.service");
+const delivery_schema_1 = require("../entregas/schemas/delivery.schema");
+const socorro_schema_1 = require("../socorros/schemas/socorro.schema");
 let LojistasService = class LojistasService {
-    constructor(lojistaModel) {
+    constructor(lojistaModel, deliveryModel, socorroModel, googleMapsService) {
         this.lojistaModel = lojistaModel;
+        this.deliveryModel = deliveryModel;
+        this.socorroModel = socorroModel;
+        this.googleMapsService = googleMapsService;
+    }
+    async getDashboardSummary(solicitanteId) {
+        const id = new mongoose_2.Types.ObjectId(solicitanteId);
+        const deliverySummary = await this.deliveryModel.aggregate([
+            { $match: { solicitanteId: id } },
+            {
+                $group: {
+                    _id: null,
+                    concluidas: { $sum: { $cond: [{ $eq: ['$status', 'entregue'] }, 1, 0] } },
+                    emAndamento: { $sum: { $cond: [{ $in: ['$status', ['pendente', 'aceito', 'a_caminho', 'instalando']] }, 1, 0] } },
+                    canceladas: { $sum: { $cond: [{ $eq: ['$status', 'cancelado'] }, 1, 0] } },
+                },
+            },
+        ]);
+        const socorroSummary = await this.socorroModel.aggregate([
+            { $match: { solicitanteId: id } },
+            {
+                $group: {
+                    _id: null,
+                    concluidas: { $sum: { $cond: [{ $eq: ['$status', 'concluído'] }, 1, 0] } },
+                    emAndamento: { $sum: { $cond: [{ $in: ['$status', ['pendente', 'aceito', 'à_caminho', 'no_local']] }, 1, 0] } },
+                    canceladas: { $sum: { $cond: [{ $eq: ['$status', 'cancelado'] }, 1, 0] } },
+                },
+            },
+        ]);
+        const totalConcluidas = (deliverySummary[0]?.concluidas || 0) + (socorroSummary[0]?.concluidas || 0);
+        const totalEmAndamento = (deliverySummary[0]?.emAndamento || 0) + (socorroSummary[0]?.emAndamento || 0);
+        const totalCanceladas = (deliverySummary[0]?.canceladas || 0) + (socorroSummary[0]?.canceladas || 0);
+        return {
+            concluidas: totalConcluidas,
+            emAndamento: totalEmAndamento,
+            canceladas: totalCanceladas,
+        };
     }
     async create(createLojistaDto) {
-        const existingLojista = await this.findOneByEmail(createLojistaDto.email);
+        const { email, endereco } = createLojistaDto;
+        const existingLojista = await this.findOneByEmail(email);
         if (existingLojista) {
             throw new common_1.ConflictException('Este email já está cadastrado.');
         }
-        const createdLojista = new this.lojistaModel(createLojistaDto);
+        const coordinates = await this.googleMapsService.geocodeAddress(endereco);
+        const dadosCompletosDoLojista = {
+            ...createLojistaDto,
+            coordinates: coordinates,
+        };
+        const createdLojista = new this.lojistaModel(dadosCompletosDoLojista);
         return createdLojista.save();
+    }
+    async update(id, updateLojistaDto) {
+        if (updateLojistaDto.password) {
+            const salt = await bcrypt.genSalt();
+            updateLojistaDto.password = await bcrypt.hash(updateLojistaDto.password, salt);
+        }
+        if (updateLojistaDto.endereco) {
+            const coordinates = await this.googleMapsService.geocodeAddress(updateLojistaDto.endereco);
+            updateLojistaDto.coordinates = coordinates;
+        }
+        return this.lojistaModel.findByIdAndUpdate(id, updateLojistaDto, { new: true }).exec();
+    }
+    async delete(id) {
+        return this.lojistaModel.findByIdAndDelete(id).exec();
+    }
+    async findAll(query) {
+        const { page = 1, limit = 10 } = query;
+        const skip = (page - 1) * limit;
+        const [lojistas, total] = await Promise.all([
+            this.lojistaModel
+                .find()
+                .sort({ nomeFantasia: 1 })
+                .skip(skip)
+                .limit(limit)
+                .exec(),
+            this.lojistaModel.countDocuments(),
+        ]);
+        return {
+            data: lojistas,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        };
     }
     async findOneByEmail(email) {
         return this.lojistaModel.findOne({ email }).exec();
@@ -44,11 +123,19 @@ let LojistasService = class LojistasService {
         }
         return null;
     }
+    async findAllForSelection() {
+        return this.lojistaModel.find().select('_id nomeFantasia').exec();
+    }
 };
 exports.LojistasService = LojistasService;
 exports.LojistasService = LojistasService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(lojista_schema_1.Lojista.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __param(1, (0, mongoose_1.InjectModel)(delivery_schema_1.Delivery.name)),
+    __param(2, (0, mongoose_1.InjectModel)(socorro_schema_1.Socorro.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model,
+        mongoose_2.Model,
+        google_maps_service_1.GoogleMapsService])
 ], LojistasService);
 //# sourceMappingURL=lojistas.service.js.map

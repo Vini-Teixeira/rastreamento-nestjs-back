@@ -11,8 +11,9 @@ async function bootstrap() {
 
   app.enableCors({
     origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+    allowedHeaders: 'Content-Type, Authorization, Cache-Control, Pragma, Expires',
   });
 
   app.useGlobalPipes(new ValidationPipe());
@@ -22,12 +23,10 @@ async function bootstrap() {
   await app.listen(port, '0.0.0.0');
 
   process.on('unhandledRejection', (reason, p) => {
-  // eslint-disable-next-line no-console
   console.error('Unhandled Rejection at:', p, 'reason:', reason);
 });
 
 process.on('uncaughtException', (err) => {
-  // eslint-disable-next-line no-console
   console.error('Uncaught Exception thrown:', err);
 });
 }

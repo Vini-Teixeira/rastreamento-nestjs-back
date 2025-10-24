@@ -18,11 +18,11 @@ const entregas_service_1 = require("./entregas.service");
 const create_delivery_dto_1 = require("./dto/create-delivery.dto");
 const update_delivery_dto_1 = require("./dto/update-delivery.dto");
 const delivery_schema_1 = require("./schemas/delivery.schema");
-const firebase_auth_guard_1 = require("../auth/firebase-auth/firebase-auth.guard");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
-const passport_1 = require("@nestjs/passport");
-const common_2 = require("@nestjs/common");
-const logger = new common_2.Logger('EntregasController');
+const flexible_auth_guard_1 = require("../auth/flexible-auth.guard");
+const rejeicao_dto_1 = require("./dto/rejeicao.dto");
+const instalando_dto_1 = require("./dto/instalando.dto");
+const logger = new common_1.Logger('EntregasController');
 class SyncLocationDto {
 }
 let EntregasController = class EntregasController {
@@ -31,9 +31,16 @@ let EntregasController = class EntregasController {
     }
     async syncLocations(syncLocationDto, req) {
         const user = req.user;
-        logger.debug(`Handler <NOME> → req.user: ${user ? JSON.stringify({ sub: user.sub }) : 'none'}`);
-        if (!user?.sub)
+        logger.debug(`Handler syncLocations → req.user: ${user ? JSON.stringify({ sub: user.sub }) : 'none'}`);
+        if (!user?.sub) {
             throw new common_1.UnauthorizedException('Token inválido ou ausente');
+        }
+        if (!syncLocationDto?.locations ||
+            !Array.isArray(syncLocationDto.locations)) {
+            throw new common_1.BadRequestException('Payload de localizações inválido');
+        }
+        await this.entregasService.bulkUpdateDriverLocations(user.sub, syncLocationDto.locations);
+        return { success: true };
     }
     async findMyDeliveries(request) {
         const driver = request.user;
@@ -44,12 +51,17 @@ let EntregasController = class EntregasController {
     }
     async findDeliveryDetailsForDriver(id, request) {
         const delivery = await this.entregasService.findOne(id);
-        if (!delivery)
+        if (!delivery) {
             throw new common_1.NotFoundException(`Entrega com ID "${id}" não encontrada.`);
+        }
         const driver = request.user;
-        if (!delivery.driverId)
+        if (!delivery.driverId) {
             throw new common_1.UnauthorizedException('Esta entrega não está atribuída a nenhum entregador.');
-        if (delivery.driverId._id.toString() !== driver.sub.toString()) {
+        }
+        const assigned = delivery.driverId?._id?.toString() ??
+            delivery.driverId?.toString() ??
+            null;
+        if (assigned !== driver.sub.toString()) {
             throw new common_1.UnauthorizedException('Você não tem permissão para ver os detalhes desta entrega.');
         }
         return delivery;
@@ -57,14 +69,18 @@ let EntregasController = class EntregasController {
     async getDeliveryDirectionsForDriver(id, request) {
         const delivery = await this.entregasService.findOne(id);
         const driver = request.user;
-        if (!delivery)
+        if (!delivery) {
             throw new common_1.NotFoundException('Entrega não encontrada.');
-        if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
+        }
+        const assigned = delivery.driverId?._id?.toString() ??
+            delivery.driverId?.toString() ??
+            null;
+        if (!assigned || assigned !== driver.sub.toString()) {
             throw new common_1.UnauthorizedException('Você não tem permissão para ver a rota desta entrega.');
         }
         let originCoords;
         let destinationCoords;
-        if (delivery.status.toUpperCase() === 'ON_THE_WAY' &&
+        if (delivery.status === delivery_schema_1.DeliveryStatus.A_CAMINHO &&
             delivery.driverCurrentLocation) {
             originCoords = delivery.driverCurrentLocation;
             destinationCoords = delivery.destination.coordinates;
@@ -76,57 +92,50 @@ let EntregasController = class EntregasController {
         const polyline = await this.entregasService.getSnappedRoutePolyline(originCoords, destinationCoords);
         return { polyline };
     }
+    async recusarEntrega(deliveryId, request, rejeicaoDto) {
+        const driverId = request.user.sub;
+        return this.entregasService.recusarEntrega(deliveryId, driverId, rejeicaoDto);
+    }
     async acceptDelivery(id, request) {
-        const delivery = await this.entregasService.findOne(id);
         const driver = request.user;
-        if (!delivery)
-            throw new common_1.NotFoundException('Entrega não encontrada.');
-        if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
-            throw new common_1.UnauthorizedException('Você não tem permissão para modificar esta entrega.');
+        if (!driver || !driver.sub) {
+            throw new common_1.NotFoundException('ID do entregador não encontrado no token.');
         }
-        if (delivery.status !== delivery_schema_1.DeliveryStatus.PENDING) {
-            throw new common_1.ForbiddenException('Apenas entregas pendentes podem ser aceitas.');
-        }
-        return this.entregasService.update(id, { status: delivery_schema_1.DeliveryStatus.ACCEPTED });
+        return this.entregasService.acceptDelivery(id, driver.sub);
     }
     async collectItem(id, request) {
-        const delivery = await this.entregasService.findOne(id);
         const driver = request.user;
-        if (!delivery)
-            throw new common_1.NotFoundException('Entrega não encontrada.');
-        if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
-            throw new common_1.UnauthorizedException('Você não tem permissão para modificar esta entrega.');
-        }
-        if (delivery.status !== delivery_schema_1.DeliveryStatus.ACCEPTED) {
-            throw new common_1.ForbiddenException('Apenas entregas com status "accepted" podem ser coletadas.');
-        }
-        return this.entregasService.update(id, {
-            status: delivery_schema_1.DeliveryStatus.ON_THE_WAY,
-        });
+        return this.entregasService.collectItem(id, driver.sub);
+    }
+    async liberarCheckIn(deliveryId, request) {
+        const lojistaId = request.user.sub;
+        return this.entregasService.liberarCheckInManual(deliveryId, lojistaId);
+    }
+    async realizarInstalacao(deliveryId, request, instalandoDto) {
+        const driverId = request.user.sub;
+        return this.entregasService.realizarCheckIn(deliveryId, driverId, instalandoDto);
     }
     async finishDelivery(id, request) {
-        const delivery = await this.entregasService.findOne(id);
         const driver = request.user;
-        if (!delivery)
-            throw new common_1.NotFoundException('Entrega não encontrada.');
-        if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
-            throw new common_1.UnauthorizedException('Você não tem permissão para modificar esta entrega.');
-        }
-        if (delivery.status !== delivery_schema_1.DeliveryStatus.ON_THE_WAY) {
-            throw new common_1.ForbiddenException('Apenas entregas "a caminho" podem ser finalizadas.');
-        }
-        return this.entregasService.update(id, {
-            status: delivery_schema_1.DeliveryStatus.DELIVERED,
-        });
+        return this.entregasService.finishDelivery(id, driver.sub);
     }
-    async create(createDeliveryDto) {
-        return this.entregasService.create(createDeliveryDto);
+    async create(createDeliveryDto, req) {
+        const lojistaId = req.user.sub;
+        return this.entregasService.create(createDeliveryDto, lojistaId);
     }
-    async findAll(statusStrings, page = 1, limit = 8) {
-        const statuses = statusStrings
-            .filter((s) => Object.values(delivery_schema_1.DeliveryStatus).includes(s))
-            .map((s) => s);
-        return this.entregasService.findFilteredAndPaginated(statuses, page, limit);
+    async findAll(req, page = 1, limit = 8, status) {
+        const user = req.user;
+        if (user.role === 'admin') {
+            return this.entregasService.findAll({ page, limit, status });
+        }
+        else {
+            const lojistaId = user.sub;
+            return this.entregasService.findAllBySolicitanteId(lojistaId, page, limit, status);
+        }
+    }
+    async findAllByLojista(req, page = 1, limit = 8) {
+        const lojistaId = req.user.sub;
+        return this.entregasService.findAllBySolicitanteId(lojistaId, page, limit);
     }
     async findOne(id) {
         return this.entregasService.findOne(id);
@@ -150,7 +159,7 @@ let EntregasController = class EntregasController {
         }
         let originCoords;
         let destinationCoords;
-        if (delivery.status === delivery_schema_1.DeliveryStatus.ON_THE_WAY &&
+        if (delivery.status === delivery_schema_1.DeliveryStatus.A_CAMINHO &&
             delivery.driverCurrentLocation) {
             originCoords = delivery.driverCurrentLocation;
             destinationCoords = delivery.destination.coordinates;
@@ -166,7 +175,6 @@ let EntregasController = class EntregasController {
 exports.EntregasController = EntregasController;
 __decorate([
     (0, common_1.Post)('localizacoes/sync'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -175,7 +183,6 @@ __decorate([
 ], EntregasController.prototype, "syncLocations", null);
 __decorate([
     (0, common_1.Get)('minhas-entregas'),
-    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -183,7 +190,6 @@ __decorate([
 ], EntregasController.prototype, "findMyDeliveries", null);
 __decorate([
     (0, common_1.Get)('detalhes/:id'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -192,7 +198,6 @@ __decorate([
 ], EntregasController.prototype, "findDeliveryDetailsForDriver", null);
 __decorate([
     (0, common_1.Get)('detalhes/:id/directions'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -200,8 +205,17 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], EntregasController.prototype, "getDeliveryDirectionsForDriver", null);
 __decorate([
-    (0, common_1.Patch)(':id/aceitar'),
+    (0, common_1.Post)(':id/recusar'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Req)()),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, rejeicao_dto_1.RejeicaoDto]),
+    __metadata("design:returntype", Promise)
+], EntregasController.prototype, "recusarEntrega", null);
+__decorate([
+    (0, common_1.Patch)(':id/aceitar'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -210,13 +224,31 @@ __decorate([
 ], EntregasController.prototype, "acceptDelivery", null);
 __decorate([
     (0, common_1.Patch)(':id/coletar'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], EntregasController.prototype, "collectItem", null);
+__decorate([
+    (0, common_1.Patch)(':id/liberar-checkin'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], EntregasController.prototype, "liberarCheckIn", null);
+__decorate([
+    (0, common_1.Post)(':id/instalando'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Req)()),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, instalando_dto_1.InstalandoDto]),
+    __metadata("design:returntype", Promise)
+], EntregasController.prototype, "realizarInstalacao", null);
 __decorate([
     (0, common_1.Patch)(':id/finalizar'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
@@ -228,26 +260,34 @@ __decorate([
 ], EntregasController.prototype, "finishDelivery", null);
 __decorate([
     (0, common_1.Post)(),
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
     (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),
     __param(0, (0, common_1.Body)(new common_1.ValidationPipe())),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_delivery_dto_1.CreateDeliveryDto]),
+    __metadata("design:paramtypes", [create_delivery_dto_1.CreateDeliveryDto, Object]),
     __metadata("design:returntype", Promise)
 ], EntregasController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
-    __param(0, (0, common_1.Query)('status', new common_1.DefaultValuePipe(''), new common_1.ParseArrayPipe({ separator: ',', optional: true }))),
+    __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('page')),
     __param(2, (0, common_1.Query)('limit')),
+    __param(3, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Array, Number, Number]),
+    __metadata("design:paramtypes", [Object, Number, Number, String]),
     __metadata("design:returntype", Promise)
 ], EntregasController.prototype, "findAll", null);
 __decorate([
+    (0, common_1.Get)(),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('page')),
+    __param(2, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Number, Number]),
+    __metadata("design:returntype", Promise)
+], EntregasController.prototype, "findAllByLojista", null);
+__decorate([
     (0, common_1.Get)(':id'),
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -255,7 +295,6 @@ __decorate([
 ], EntregasController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':id'),
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)(new common_1.ValidationPipe())),
     __metadata("design:type", Function),
@@ -264,7 +303,6 @@ __decorate([
 ], EntregasController.prototype, "update", null);
 __decorate([
     (0, common_1.Post)(':id/route-point'),
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)('lat', common_1.ParseFloatPipe)),
@@ -275,7 +313,6 @@ __decorate([
 ], EntregasController.prototype, "addRoutePoint", null);
 __decorate([
     (0, common_1.Delete)(':id'),
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
     (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
@@ -284,7 +321,6 @@ __decorate([
 ], EntregasController.prototype, "delete", null);
 __decorate([
     (0, common_1.Patch)(':id/driver-location'),
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)('lat', common_1.ParseFloatPipe)),
@@ -295,7 +331,6 @@ __decorate([
 ], EntregasController.prototype, "updateDriverLocation", null);
 __decorate([
     (0, common_1.Get)(':id/directions'),
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -303,6 +338,7 @@ __decorate([
 ], EntregasController.prototype, "getDeliveryDirections", null);
 exports.EntregasController = EntregasController = __decorate([
     (0, common_1.Controller)('entregas'),
+    (0, common_1.UseGuards)(flexible_auth_guard_1.FlexibleAuthGuard),
     __metadata("design:paramtypes", [entregas_service_1.EntregasService])
 ], EntregasController);
 //# sourceMappingURL=entregas.controller.js.map

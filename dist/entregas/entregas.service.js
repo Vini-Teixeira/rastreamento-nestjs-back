@@ -21,62 +21,67 @@ const delivery_schema_1 = require("./schemas/delivery.schema");
 const entregador_schema_1 = require("../entregadores/schemas/entregador.schema");
 const google_maps_service_1 = require("../google-maps/google-maps.service");
 const entregadores_gateway_1 = require("../entregadores/entregadores.gateway");
-class LocationPointDto {
+const schedule_1 = require("@nestjs/schedule");
+const fcm_service_1 = require("../fcm/fcm.service");
+const lojista_schema_1 = require("../lojistas/schemas/lojista.schema");
+function toGeoJSONPoint(lat, lng) {
+    return { type: 'Point', coordinates: [lng, lat] };
+}
+function toGeoJSONWithTimestamp(lat, lng, timestamp) {
+    const p = toGeoJSONPoint(lat, lng);
+    if (timestamp)
+        p.timestamp = timestamp;
+    return p;
+}
+function getLatLngFromGeoJSONOrLatLng(input) {
+    if (input?.type === 'Point' &&
+        Array.isArray(input.coordinates)) {
+        const [lng, lat] = input.coordinates;
+        return { lat, lng };
+    }
+    return input;
+}
+function isObjectIdLike(value) {
+    if (!value)
+        return false;
+    if (value instanceof mongoose_2.Types.ObjectId)
+        return true;
+    if (typeof value === 'string' && mongoose_2.Types.ObjectId.isValid(value))
+        return true;
+    if (value._id && mongoose_2.Types.ObjectId.isValid(String(value._id)))
+        return true;
+    return false;
 }
 let EntregasService = EntregasService_1 = class EntregasService {
-    constructor(deliveryModel, entregadorModel, googleMapsService, entregadoresGateway) {
+    constructor(deliveryModel, entregadorModel, googleMapsService, entregadoresGateway, connection, schedulerRegistry, fcmService, lojistaModel) {
         this.deliveryModel = deliveryModel;
         this.entregadorModel = entregadorModel;
         this.googleMapsService = googleMapsService;
         this.entregadoresGateway = entregadoresGateway;
+        this.connection = connection;
+        this.schedulerRegistry = schedulerRegistry;
+        this.fcmService = fcmService;
+        this.lojistaModel = lojistaModel;
         this.logger = new common_1.Logger(EntregasService_1.name);
     }
-    async create(createDeliveryDto) {
-        const { origin, destination } = createDeliveryDto;
-        const nearestDriverInfo = await this._findNearestDriverInfo(origin.coordinates);
-        if (!nearestDriverInfo) {
-            this.logger.warn(`Nenhum entregador disponível encontrado perto das coordenadas: ${JSON.stringify(origin.coordinates)}`);
-            throw new common_1.NotFoundException('Nenhum entregador disponível foi encontrado.');
+    async findNearestDriverInfo(originCoordinates, excludeDriverIds = []) {
+        const { lat, lng } = getLatLngFromGeoJSONOrLatLng(originCoordinates);
+        const query = {
+            ativo: true,
+            emEntrega: false,
+            localizacao: { $exists: true },
+        };
+        if (excludeDriverIds.length > 0) {
+            query._id = {
+                $nin: excludeDriverIds.map((id) => new mongoose_2.Types.ObjectId(id)),
+            };
         }
-        const nearestDriver = await this.entregadorModel
-            .findById(nearestDriverInfo._id)
-            .exec();
-        if (!nearestDriver) {
-            throw new common_1.NotFoundException(`Entregador com ID ${nearestDriverInfo._id} não foi encontrado no banco.`);
-        }
-        this.logger.log(`Entregador mais próximo encontrado: ${nearestDriver.nome}`);
-        let destinationCoordinates;
-        try {
-            destinationCoordinates = await this.googleMapsService.geocodeAddress(destination.address);
-        }
-        catch (error) {
-            this.logger.error(`Falha no geocoding para o endereço: ${destination.address}`, error.stack);
-            throw new common_1.BadRequestException('O endereço de destino não pôde ser encontrado. Por favor, verifique e tente novamente.');
-        }
-        const newDelivery = new this.deliveryModel({
-            ...createDeliveryDto,
-            destination: {
-                address: destination.address,
-                coordinates: destinationCoordinates,
-            },
-            driverId: nearestDriver._id,
-            status: delivery_schema_1.DeliveryStatus.PENDING,
-        });
-        this.entregadoresGateway.notifyNewDelivery(nearestDriver._id.toString(), newDelivery);
-        this.logger.log(`Notificação de nova entrega enviada para o entregador ${nearestDriver._id}`);
-        return newDelivery.save();
-    }
-    async _findNearestDriverInfo(originCoordinates) {
-        const { lat, lng } = originCoordinates;
         const drivers = await this.entregadorModel.aggregate([
             {
                 $geoNear: {
-                    near: {
-                        type: 'Point',
-                        coordinates: [lng, lat],
-                    },
+                    near: { type: 'Point', coordinates: [lng, lat] },
                     distanceField: 'distanciaCalculada',
-                    query: { ativo: true, emEntrega: false },
+                    query: query,
                     spherical: true,
                 },
             },
@@ -84,9 +89,398 @@ let EntregasService = EntregasService_1 = class EntregasService {
         ]);
         return drivers.length > 0 ? drivers[0] : null;
     }
+    async _findAndReassignDelivery(delivery, session) {
+        this.logger.log(`Procurando novo entregador para a entrega ${delivery.id}...`);
+        const excludedDriverIds = delivery.historicoRejeicoes
+            .filter((rejeicao) => rejeicao.motivo !== 'Recusa Automática')
+            .map((rejeicao) => rejeicao.driverId.toString());
+        this.logger.log(`Excluindo os seguintes entregadores da busca: [${excludedDriverIds.join(', ')}]`);
+        const newDriver = await this.findNearestDriverInfo(delivery.origin.coordinates, excludedDriverIds);
+        if (newDriver) {
+            this.logger.log(`Novo entregador ${newDriver.nome} encontrado...`);
+            delivery.driverId = newDriver._id;
+            await delivery.save({ session });
+            this.entregadoresGateway.notifyNewDelivery(newDriver._id.toString(), delivery);
+            const timeoutName = `delivery-timeout-${delivery.id}`;
+            const timeout = setTimeout(() => this.handleDeliveryTimeout(delivery.id, newDriver._id.toString()), 32000);
+            this.schedulerRegistry.addTimeout(timeoutName, timeout);
+            this.logger.log(`Timeout de 14s agendado para a entrega ${delivery.id}`);
+        }
+        else {
+            this.logger.warn(`Nenhum outro entregador disponível. A entrega ${delivery.id} voltará para a fila.`);
+            delivery.driverId = undefined;
+            await delivery.save({ session });
+        }
+    }
+    async create(createDeliveryDto, solicitanteId) {
+        const { destination, itemDescription, origemId } = createDeliveryDto;
+        const idDaLojaDeOrigem = origemId || solicitanteId;
+        const lojaDeOrigem = await this.lojistaModel
+            .findById(idDaLojaDeOrigem)
+            .exec();
+        if (!lojaDeOrigem) {
+            throw new common_1.NotFoundException(`Loja de origem com ID ${idDaLojaDeOrigem} não encontrada.`);
+        }
+        const nearestDriverInfo = await this.findNearestDriverInfo(lojaDeOrigem.coordinates);
+        if (!nearestDriverInfo) {
+            throw new common_1.NotFoundException('Nenhum entregador disponível foi encontrado perto da loja de origem.');
+        }
+        this.logger.log(`Entregador mais próximo: ${nearestDriverInfo.nome} a ${nearestDriverInfo.distanciaCalculada.toFixed(0)} metros.`);
+        let destinationGeo;
+        try {
+            destinationGeo = await this.googleMapsService.geocodeAddress(destination.address);
+        }
+        catch (error) {
+            throw new common_1.BadRequestException('O endereço de destino não pôde ser encontrado.');
+        }
+        let codigoUnico = '';
+        let codigoJaExiste = true;
+        while (codigoJaExiste) {
+            codigoUnico = gerarCodigoAleatorio(6);
+            const entregaExistente = await this.deliveryModel.findOne({
+                codigoEntrega: codigoUnico,
+            }).exec();
+            if (!entregaExistente) {
+                codigoJaExiste = false;
+            }
+        }
+        this.logger.log(`Código de entrega único gerado: ${codigoUnico}`);
+        const newDelivery = new this.deliveryModel({
+            solicitanteId: new mongoose_2.Types.ObjectId(solicitanteId),
+            origemId: new mongoose_2.Types.ObjectId(idDaLojaDeOrigem),
+            itemDescription,
+            status: delivery_schema_1.DeliveryStatus.PENDENTE,
+            origin: {
+                address: lojaDeOrigem.endereco,
+                coordinates: lojaDeOrigem.coordinates,
+            },
+            destination: {
+                address: destination.address,
+                coordinates: destinationGeo,
+            },
+            driverId: nearestDriverInfo._id,
+            codigoEntrega: codigoUnico,
+        });
+        const saved = await newDelivery.save();
+        try {
+            this.entregadoresGateway.notifyNewDelivery(nearestDriverInfo._id.toString(), saved);
+            if (nearestDriverInfo.fcmToken) {
+                this.fcmService.sendPushNotification(nearestDriverInfo.fcmToken, 'Nova Entrega Disponível!', `Destino: ${saved.destination.address}`, { deliveryId: saved.id, type: 'entrega' });
+            }
+            this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
+        }
+        catch (err) {
+            this.logger.error('Falha ao notificar o entregador', err?.stack);
+        }
+        return saved.toObject();
+    }
+    async recusarEntrega(deliveryId, driverId, rejeicaoDto) {
+        const timeoutName = `delivery-timeout-${deliveryId}`;
+        try {
+            if (this.schedulerRegistry.doesExist('timeout', timeoutName)) {
+                this.schedulerRegistry.deleteTimeout(timeoutName);
+                this.logger.log(`Timeout para a entrega ${deliveryId} cancelado devido a recusa manual.`);
+            }
+        }
+        catch (e) {
+            this.logger.warn(`Falha ao tentar apagar o timeout ${timeoutName}. Pode já ter sido executado.`);
+        }
+        const session = await this.connection.startSession();
+        session.startTransaction();
+        try {
+            const delivery = await this.deliveryModel
+                .findById(deliveryId)
+                .session(session);
+            if (!delivery) {
+                throw new common_1.NotFoundException('Entrega não encontrada.');
+            }
+            if (delivery.driverId?.toString() !== driverId) {
+                throw new common_1.ForbiddenException('Você não pode recusar uma entrega que não é sua.');
+            }
+            if (delivery.status !== delivery_schema_1.DeliveryStatus.PENDENTE) {
+                throw new common_1.BadRequestException('Esta entrega não pode mais ser recusada.');
+            }
+            delivery.historicoRejeicoes.push({
+                ...rejeicaoDto,
+                driverId: new mongoose_2.Types.ObjectId(driverId),
+                timestamp: new Date(),
+            });
+            await delivery.save({ session });
+            if (delivery.historicoRejeicoes.length >= 3) {
+                this.logger.warn(`A entrega ${deliveryId} foi recusada ${delivery.historicoRejeicoes.length} vezes. Notificando administrador...`);
+            }
+            await this._findAndReassignDelivery(delivery, session);
+            await session.commitTransaction();
+            return { message: 'Entrega recusada e reatribuída com sucesso.' };
+        }
+        catch (error) {
+            await session.abortTransaction();
+            throw error;
+        }
+        finally {
+            session.endSession();
+        }
+    }
+    async handleDeliveryTimeout(deliveryId, driverId) {
+        this.logger.log(`Verificando timeout para a entrega ${deliveryId} do entregador ${driverId}...`);
+        const delivery = await this.deliveryModel.findById(deliveryId);
+        if (delivery &&
+            delivery.status === delivery_schema_1.DeliveryStatus.PENDENTE &&
+            delivery.driverId?.toString() === driverId) {
+            this.logger.warn(`Timeout! Entregador ${driverId} não respondeu. Recusa automática iniciada.`);
+            const rejeicaoDto = {
+                motivo: 'Recusa automática',
+                texto: 'O entregador não respondeu a tempo.',
+            };
+            await this.recusarEntrega(deliveryId, driverId, rejeicaoDto);
+        }
+        else {
+            this.logger.log(`Timeout para ${deliveryId} ignorado. Entrega já foi aceita ou recusada.`);
+        }
+    }
+    async acceptDelivery(id, driverId) {
+        const timeoutName = `delivery-timeout-${id}`;
+        if (this.schedulerRegistry.doesExist('timeout', timeoutName)) {
+            this.schedulerRegistry.deleteTimeout(timeoutName);
+            this.logger.log(`Timeout para a entrega ${id} cancelado`);
+        }
+        const session = await this.connection.startSession();
+        session.startTransaction();
+        try {
+            const delivery = await this.deliveryModel
+                .findById(id)
+                .session(session)
+                .exec();
+            if (!delivery)
+                throw new common_1.NotFoundException(`Entrega com ID ${id} não encontrada.`);
+            const assigned = delivery.driverId?._id?.toString() ??
+                delivery.driverId?.toString() ??
+                null;
+            if (assigned && assigned !== driverId) {
+                throw new common_1.ForbiddenException('Entrega atribuída a outro entregador.');
+            }
+            if (delivery.status !== delivery_schema_1.DeliveryStatus.PENDENTE) {
+                throw new common_1.BadRequestException('Entrega não está mais disponível para aceitar.');
+            }
+            delivery.status = delivery_schema_1.DeliveryStatus.ACEITO;
+            delivery.driverId = new mongoose_2.Types.ObjectId(driverId);
+            const savedDeliveryPromise = delivery.save({ session });
+            const updateDriverPromise = this.entregadorModel
+                .updateOne({ _id: driverId }, { $set: { emEntrega: true }, recusasConsecutivas: 0 }, { session })
+                .exec();
+            const [saved] = await Promise.all([
+                savedDeliveryPromise,
+                updateDriverPromise,
+            ]);
+            await session.commitTransaction();
+            try {
+                this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
+            }
+            catch (err) {
+                this.logger.error('Falha ao emitir delivery_update após aceitar entrega.', err?.stack);
+            }
+            return saved;
+        }
+        catch (error) {
+            await session.abortTransaction();
+            this.logger.error('Transação para aceitar não concluída.', error?.stack);
+            throw error;
+        }
+        finally {
+            session.endSession();
+        }
+    }
+    async collectItem(id, driverId) {
+        const delivery = await this.deliveryModel.findById(id).exec();
+        if (!delivery) {
+            throw new common_1.NotFoundException('Entrega não encontrada.');
+        }
+        const assigned = delivery.driverId?.toString() ?? null;
+        if (!assigned || assigned !== driverId) {
+            throw new common_1.UnauthorizedException('Você não tem permissão para modificar esta entrega.');
+        }
+        if (delivery.status !== delivery_schema_1.DeliveryStatus.ACEITO) {
+            throw new common_1.ForbiddenException('Apenas entregas com status "accepted" podem ser coletadas.');
+        }
+        delivery.status = delivery_schema_1.DeliveryStatus.A_CAMINHO;
+        const saved = await delivery.save();
+        this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
+        return saved;
+    }
+    async liberarCheckInManual(deliveryId, solicitanteId) {
+        const delivery = await this.deliveryModel.findById(deliveryId).exec();
+        if (!delivery) {
+            throw new common_1.NotFoundException(`Entrega com ID ${deliveryId} não encontrada.`);
+        }
+        if (delivery.solicitanteId.toString() !== solicitanteId) {
+            throw new common_1.ForbiddenException('Você não tem permissão para modificar esta entrega');
+        }
+        const statusPermitidos = [
+            delivery_schema_1.DeliveryStatus.ACEITO,
+            delivery_schema_1.DeliveryStatus.A_CAMINHO,
+        ];
+        if (!statusPermitidos.includes(delivery.status)) {
+            throw new common_1.BadRequestException(`Não é possível liberar o CheckIn para uma entrega com status "${delivery.status}".`);
+        }
+        delivery.checkInLiberadoManualmente = true;
+        const saved = await delivery.save();
+        this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
+        return saved;
+    }
+    async realizarCheckIn(deliveryId, driverId, instalandoDto) {
+        const session = await this.connection.startSession();
+        session.startTransaction();
+        try {
+            const delivery = await this.deliveryModel
+                .findById(deliveryId)
+                .session(session);
+            if (!delivery)
+                throw new common_1.NotFoundException('Entrega não encontrada');
+            if (delivery.driverId?.toString() !== driverId) {
+                throw new common_1.ForbiddenException('Esta entrega não lhe pertence.');
+            }
+            if (delivery.codigoEntrega !== instalandoDto.codigoEntrega &&
+                !delivery.checkInLiberadoManualmente) {
+                throw new common_1.BadRequestException('Código de confirmação inválido.');
+            }
+            delivery.status = delivery_schema_1.DeliveryStatus.INSTALANDO;
+            const deliverySavePromise = delivery.save({ session });
+            const driverUpdatePromise = this.entregadorModel
+                .updateOne({ _id: driverId }, { $set: { emEntrega: false } }, { session })
+                .exec();
+            const [savedDelivery] = await Promise.all([
+                deliverySavePromise,
+                driverUpdatePromise,
+            ]);
+            await session.commitTransaction();
+            this.entregadoresGateway.notifyDeliveryStatusChanged(savedDelivery);
+            return savedDelivery;
+        }
+        catch (error) {
+            await session.abortTransaction();
+            throw error;
+        }
+        finally {
+            session.endSession();
+        }
+    }
+    async finishDelivery(id, driverId) {
+        const session = await this.connection.startSession();
+        session.startTransaction();
+        try {
+            const delivery = await this.deliveryModel
+                .findById(id)
+                .session(session)
+                .exec();
+            if (!delivery) {
+                throw new common_1.NotFoundException(`Entrega com ID ${id} não encontrada.`);
+            }
+            const assigned = delivery.driverId?.toString() ?? null;
+            if (!assigned || assigned !== driverId) {
+                throw new common_1.UnauthorizedException('Você não tem permissão para finalizar esta entrega.');
+            }
+            if (delivery.status !== delivery_schema_1.DeliveryStatus.INSTALANDO) {
+                throw new common_1.ForbiddenException('Apenas entregas "a caminho" podem ser finalizadas.');
+            }
+            delivery.status = delivery_schema_1.DeliveryStatus.ENTREGUE;
+            const savedDeliveryPromise = delivery.save({ session });
+            const updateDriverPromise = this.entregadorModel
+                .updateOne({ _id: delivery.driverId }, { $set: { emEntrega: false } }, { session })
+                .exec();
+            const [savedDelivery] = await Promise.all([
+                savedDeliveryPromise,
+                updateDriverPromise,
+            ]);
+            await session.commitTransaction();
+            this.entregadoresGateway.notifyDeliveryStatusChanged(savedDelivery);
+            return savedDelivery;
+        }
+        catch (error) {
+            await session.abortTransaction();
+            throw error;
+        }
+        finally {
+            session.endSession();
+        }
+    }
+    async handleStaleDeliveries() {
+        this.logger.log('Executando verificação de entregas pendentes...');
+        const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+        const staleDeliveries = await this.deliveryModel
+            .find({
+            status: delivery_schema_1.DeliveryStatus.PENDENTE,
+            createdAt: { $lt: oneMinuteAgo },
+        })
+            .exec();
+        if (staleDeliveries.length === 0) {
+            this.logger.log('Nenhuma entrega pendente encontrada.');
+            return;
+        }
+        this.logger.warn(`Encontradas ${staleDeliveries.length} entregas pendentes. Tentando reatribuir...`);
+        for (const delivery of staleDeliveries) {
+            await this._findAndReassignDelivery(delivery);
+        }
+    }
+    async findAll(query) {
+        const { page = 1, limit = 8, status } = query;
+        const skip = (page - 1) * limit;
+        const filter = {};
+        if (status) {
+            const statusArray = status.split(',');
+            const regexArray = statusArray.map((s) => new RegExp(`^${s}$`, 'i'));
+            filter.status = { $in: regexArray };
+        }
+        const [deliveries, total] = await Promise.all([
+            this.deliveryModel
+                .find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .exec(),
+            this.deliveryModel.countDocuments(filter),
+        ]);
+        return {
+            deliveries: deliveries,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        };
+    }
+    async findAllBySolicitanteId(solicitanteId, page = 1, limit = 10, status) {
+        this.logger.debug(`Buscando entregas para o Lojista ID: ${solicitanteId} com status: ${status}`);
+        const skip = (page - 1) * limit;
+        const query = { solicitanteId: new mongoose_2.Types.ObjectId(solicitanteId) };
+        if (status) {
+            const statusArray = status.split(',');
+            const regexArray = statusArray.map((s) => new RegExp(`^${s}$`, 'i'));
+            query.status = { $in: regexArray };
+        }
+        this.logger.debug(`Query enviada para o MongoDB: ${JSON.stringify(query)}`);
+        try {
+            const [deliveries, total] = await Promise.all([
+                this.deliveryModel
+                    .find(query)
+                    .populate('driverId', 'nome')
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limit)
+                    .exec(),
+                this.deliveryModel.countDocuments(query).exec(),
+            ]);
+            this.logger.debug(`Encontradas ${total} entregas para este lojista.`);
+            const plainDeliveries = deliveries.map((d) => d.toObject());
+            this.logger.debug(`Dados retornados (após serialização): ${JSON.stringify(plainDeliveries)}`);
+            return { deliveries: plainDeliveries, total, page, limit };
+        }
+        catch (error) {
+            this.logger.error(`Erro ao executar a busca por solicitanteId: ${solicitanteId}`, error);
+            throw error;
+        }
+    }
     async findFilteredAndPaginated(statuses, page = 1, limit = 8) {
         const skip = (page - 1) * limit;
-        const query = (statuses && statuses.length > 0) ? { status: { $in: statuses } } : {};
+        const query = statuses?.length ? { status: { $in: statuses } } : {};
         try {
             const [deliveries, total] = await Promise.all([
                 this.deliveryModel
@@ -98,10 +492,10 @@ let EntregasService = EntregasService_1 = class EntregasService {
                     .exec(),
                 this.deliveryModel.countDocuments(query).exec(),
             ]);
-            return { deliveries, total, page, limit };
+            return { deliveries: deliveries || [], total, page, limit };
         }
         catch (error) {
-            this.logger.error('Falha ao buscar entregas paginadas', error.stack);
+            this.logger.error('Falha ao buscar entregas paginadas', error?.stack);
             return { deliveries: [], total: 0, page, limit };
         }
     }
@@ -110,9 +504,8 @@ let EntregasService = EntregasService_1 = class EntregasService {
             .findById(id)
             .populate('driverId')
             .exec();
-        if (!delivery) {
+        if (!delivery)
             throw new common_1.NotFoundException(`Entrega com ID "${id}" não encontrada.`);
-        }
         return delivery;
     }
     async update(id, updateDeliveryDto) {
@@ -120,50 +513,52 @@ let EntregasService = EntregasService_1 = class EntregasService {
         if (!existingDelivery) {
             throw new common_1.NotFoundException(`Entrega com ID "${id}" não encontrada para atualização.`);
         }
-        if (updateDeliveryDto.status) {
+        if (updateDeliveryDto.status)
             existingDelivery.status = updateDeliveryDto.status;
-        }
-        if (updateDeliveryDto.driverId) {
+        if (updateDeliveryDto.driverId)
             existingDelivery.driverId = new mongoose_2.Types.ObjectId(updateDeliveryDto.driverId);
-        }
-        if (updateDeliveryDto.itemDescription) {
+        if (updateDeliveryDto.itemDescription)
             existingDelivery.itemDescription = updateDeliveryDto.itemDescription;
-        }
-        if (updateDeliveryDto.routeHistory) {
-            existingDelivery.routeHistory = updateDeliveryDto.routeHistory.map((coordDto) => ({
-                lat: coordDto.lat,
-                lng: coordDto.lng,
-                timestamp: coordDto.timestamp ?? new Date(),
-            }));
+        if (updateDeliveryDto.routeHistory?.length) {
+            existingDelivery.routeHistory = updateDeliveryDto.routeHistory.map((p) => toGeoJSONWithTimestamp(p.lat, p.lng, p.timestamp ? new Date(p.timestamp) : new Date()));
         }
         if (updateDeliveryDto.driverCurrentLocation) {
-            existingDelivery.driverCurrentLocation = {
-                lat: updateDeliveryDto.driverCurrentLocation.lat,
-                lng: updateDeliveryDto.driverCurrentLocation.lng,
-                timestamp: updateDeliveryDto.driverCurrentLocation.timestamp ?? new Date(),
-            };
+            const p = updateDeliveryDto.driverCurrentLocation;
+            existingDelivery.driverCurrentLocation = toGeoJSONWithTimestamp(p.lat, p.lng, p.timestamp ? new Date(p.timestamp) : new Date());
         }
-        return existingDelivery.save();
+        const saved = await existingDelivery.save();
+        try {
+            this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
+        }
+        catch (err) {
+            this.logger.error('Falha ao emitir delivery_updated após update()', err?.stack);
+        }
+        return saved;
     }
     async delete(id) {
         const result = await this.deliveryModel.deleteOne({ _id: id }).exec();
         if (result.deletedCount === 0) {
             throw new common_1.NotFoundException(`Entrega com ID "${id}" não encontrada para exclusão.`);
         }
-        return { message: 'Entrega excluída com sucesso!' };
     }
-    async findAllByDriverId(driverId) {
-        return this.deliveryModel.find({ driverId }).exec();
+    async findAllByDriverId(driverId, status) {
+        const query = {
+            driverId: isObjectIdLike(driverId)
+                ? new mongoose_2.Types.ObjectId(driverId)
+                : driverId,
+        };
+        if (status?.length)
+            query.status = { $in: status };
+        return (await this.deliveryModel.find(query).exec()) || [];
     }
     async addRoutePoint(deliveryId, lat, lng) {
         const delivery = await this.deliveryModel.findById(deliveryId).exec();
         if (!delivery) {
             throw new common_1.NotFoundException(`Entrega com ID "${deliveryId}" não encontrada para adicionar ponto de rota.`);
         }
-        if (!delivery.routeHistory) {
+        if (!delivery.routeHistory)
             delivery.routeHistory = [];
-        }
-        delivery.routeHistory.push({ lat, lng, timestamp: new Date() });
+        delivery.routeHistory.push(toGeoJSONWithTimestamp(lat, lng, new Date()));
         return delivery.save();
     }
     async updateDriverLocation(deliveryId, lat, lng) {
@@ -171,22 +566,25 @@ let EntregasService = EntregasService_1 = class EntregasService {
         if (!delivery) {
             throw new common_1.NotFoundException(`Entrega com ID "${deliveryId}" não encontrada para atualizar localização do entregador.`);
         }
-        delivery.driverCurrentLocation = {
-            lat,
-            lng,
-            timestamp: new Date(),
-        };
+        const now = new Date();
+        const geoPoint = toGeoJSONWithTimestamp(lat, lng, now);
+        delivery.driverCurrentLocation = geoPoint;
         const updatedDelivery = await delivery.save();
-        this.entregadoresGateway.server.to(deliveryId).emit('novaLocalizacao', {
-            deliveryId,
-            driverId: updatedDelivery.driverId
-                ? updatedDelivery.driverId.toString()
-                : null,
-            lat,
-            lng,
-            timestamp: updatedDelivery.driverCurrentLocation?.timestamp?.toISOString(),
-        });
-        this.logger.log(`WS Service: Localização da entrega ${deliveryId} transmitida para sala: ${lat}, ${lng}`);
+        try {
+            this.entregadoresGateway.emitDriverLocation(deliveryId, {
+                driverId: updatedDelivery.driverId
+                    ? String(updatedDelivery.driverId)
+                    : null,
+                location: {
+                    type: geoPoint.type,
+                    coordinates: geoPoint.coordinates,
+                    timestamp: now.toISOString(),
+                },
+            });
+        }
+        catch (err) {
+            this.logger.error('Falha ao emitir novaLocalizacao via WebSocket', err?.stack);
+        }
         return updatedDelivery;
     }
     async getSnappedRoutePolyline(origin, destination) {
@@ -197,14 +595,13 @@ let EntregasService = EntregasService_1 = class EntregasService {
     }
     async bulkUpdateDriverLocations(driverId, locations) {
         this.logger.log(`Sincronizando ${locations.length} pontos de localização para o entregador ${driverId}`);
-        const locationsByDelivery = new Map();
+        const byDelivery = new Map();
         for (const loc of locations) {
-            if (!locationsByDelivery.has(loc.deliveryId)) {
-                locationsByDelivery.set(loc.deliveryId, []);
-            }
-            locationsByDelivery.get(loc.deliveryId).push(loc);
+            if (!byDelivery.has(loc.deliveryId))
+                byDelivery.set(loc.deliveryId, []);
+            byDelivery.get(loc.deliveryId).push(loc);
         }
-        for (const [deliveryId, points] of locationsByDelivery.entries()) {
+        for (const [deliveryId, points] of byDelivery.entries()) {
             try {
                 const delivery = await this.deliveryModel.findById(deliveryId);
                 if (!delivery) {
@@ -215,34 +612,35 @@ let EntregasService = EntregasService_1 = class EntregasService {
                     this.logger.error(`Sync: A entrega ${deliveryId} não possui um entregador associado.`);
                     continue;
                 }
-                if (delivery.driverId._id.toString() !== driverId) {
-                    this.logger.error(`Sync: Ação não autorizada. Entregador ${driverId} tentando atualizar entrega ${deliveryId}`);
+                const deliveryDriverId = delivery.driverId?._id?.toString() ??
+                    delivery.driverId?.toString() ??
+                    '';
+                if (String(deliveryDriverId) !== String(driverId)) {
+                    this.logger.error(`Sync: Não autorizado. Entregador ${driverId} tentando atualizar entrega ${deliveryId}`);
                     continue;
                 }
                 points.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-                const routePointsToAdd = points.map(p => ({
-                    lat: p.lat,
-                    lng: p.lng,
-                    timestamp: p.timestamp,
-                }));
-                if (!delivery.routeHistory) {
+                const toAdd = points.map((p) => toGeoJSONWithTimestamp(p.lat, p.lng, new Date(p.timestamp)));
+                if (!delivery.routeHistory)
                     delivery.routeHistory = [];
-                }
-                delivery.routeHistory.push(...routePointsToAdd);
-                const latestPoint = points[points.length - 1];
-                delivery.driverCurrentLocation = {
-                    lat: latestPoint.lat,
-                    lng: latestPoint.lng,
-                    timestamp: latestPoint.timestamp,
-                };
+                delivery.routeHistory.push(...toAdd);
+                const latest = points[points.length - 1];
+                delivery.driverCurrentLocation = toGeoJSONWithTimestamp(latest.lat, latest.lng, new Date(latest.timestamp));
                 await delivery.save();
-                this.entregadoresGateway.server.to(deliveryId).emit('novaLocalizacao', {
-                    deliveryId,
-                    driverId,
-                    lat: latestPoint.lat,
-                    lng: latestPoint.lng,
-                    timestamp: latestPoint.timestamp.toISOString(),
-                });
+                try {
+                    const geo = delivery.driverCurrentLocation;
+                    this.entregadoresGateway.emitDriverLocation(deliveryId, {
+                        driverId: String(deliveryDriverId),
+                        location: {
+                            type: geo.type,
+                            coordinates: geo.coordinates,
+                            timestamp: new Date(latest.timestamp).toISOString(),
+                        },
+                    });
+                }
+                catch (err) {
+                    this.logger.error(`Erro ao emitir novaLocalizacao para a entrega ${deliveryId}`, err?.stack);
+                }
             }
             catch (error) {
                 this.logger.error(`Erro ao sincronizar pontos para a entrega ${deliveryId}: ${error.message}`);
@@ -251,14 +649,34 @@ let EntregasService = EntregasService_1 = class EntregasService {
     }
 };
 exports.EntregasService = EntregasService;
+__decorate([
+    (0, schedule_1.Cron)(schedule_1.CronExpression.EVERY_MINUTE),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], EntregasService.prototype, "handleStaleDeliveries", null);
 exports.EntregasService = EntregasService = EntregasService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(delivery_schema_1.Delivery.name)),
     __param(1, (0, mongoose_1.InjectModel)(entregador_schema_1.Entregador.name)),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => entregadores_gateway_1.EntregadoresGateway))),
+    __param(4, (0, mongoose_1.InjectConnection)()),
+    __param(7, (0, mongoose_1.InjectModel)(lojista_schema_1.Lojista.name)),
     __metadata("design:paramtypes", [mongoose_2.Model,
         mongoose_2.Model,
         google_maps_service_1.GoogleMapsService,
-        entregadores_gateway_1.EntregadoresGateway])
+        entregadores_gateway_1.EntregadoresGateway,
+        mongoose_2.Connection,
+        schedule_1.SchedulerRegistry,
+        fcm_service_1.FcmService,
+        mongoose_2.Model])
 ], EntregasService);
+function gerarCodigoAleatorio(tamanho) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVXYZ0123456789';
+    let resultado = '';
+    for (let i = 0; i < tamanho; i++) {
+        resultado += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return resultado;
+}
 //# sourceMappingURL=entregas.service.js.map

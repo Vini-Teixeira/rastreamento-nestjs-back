@@ -16,6 +16,8 @@ const google_maps_module_1 = require("../google-maps/google-maps.module");
 const entregadores_module_1 = require("../entregadores/entregadores.module");
 const delivery_schema_1 = require("./schemas/delivery.schema");
 const firebase_module_1 = require("../auth/firebase.module");
+const fcm_module_1 = require("../fcm/fcm.module");
+const lojistas_module_1 = require("../lojistas/lojistas.module");
 let EntregasModule = class EntregasModule {
 };
 exports.EntregasModule = EntregasModule;
@@ -29,10 +31,14 @@ exports.EntregasModule = EntregasModule = __decorate([
             google_maps_module_1.GoogleMapsModule,
             (0, common_1.forwardRef)(() => entregadores_module_1.EntregadoresModule),
             auth_module_1.AuthModule,
+            fcm_module_1.FcmModule,
+            lojistas_module_1.LojistasModule
         ],
         controllers: [entregas_controller_1.EntregasController],
         providers: [entregas_service_1.EntregasService],
-        exports: [entregas_service_1.EntregasService]
+        exports: [entregas_service_1.EntregasService,
+            mongoose_1.MongooseModule.forFeature([{ name: delivery_schema_1.Delivery.name, schema: delivery_schema_1.DeliverySchema }])
+        ]
     })
 ], EntregasModule);
 //# sourceMappingURL=entregas.module.js.map

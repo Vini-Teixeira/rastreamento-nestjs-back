@@ -10,9 +10,10 @@ declare class DestinationLocationDto {
     address: string;
 }
 export declare class CreateDeliveryDto {
-    origin: OriginLocationDto;
+    origin?: OriginLocationDto;
     driverId?: string;
     destination: DestinationLocationDto;
     itemDescription: string;
+    origemId?: string;
 }
 export {};

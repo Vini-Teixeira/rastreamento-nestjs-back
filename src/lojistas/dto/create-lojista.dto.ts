@@ -1,16 +1,28 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from "class-validator";
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 export class CreateLojistaDto {
-    @IsString()
-    @IsNotEmpty()
-    nomeCompleto: string;
+  @IsString()
+  @IsNotEmpty()
+  nomeFantasia: string;
 
-    @IsEmail()
-    @IsNotEmpty()
-    email: string;
+  @IsString()
+  @IsNotEmpty()
+  cnpj: string;
 
-    @IsString()
-    @IsNotEmpty()
-    @MinLength(6, {message: 'A senha deve ter no mínimo 6 caracteres.'})
-    password: string;
+  @IsString()
+  @IsNotEmpty()
+  endereco: string;
+
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @IsString()
+  @MinLength(6)
+  password: string;
 }

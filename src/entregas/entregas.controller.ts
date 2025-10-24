@@ -1,6 +1,24 @@
-import { Controller, Post, Get, Patch, Delete, Param, Body, Query, HttpStatus, HttpCode, ValidationPipe,
-  ParseFloatPipe, NotFoundException, ForbiddenException, ParseArrayPipe, DefaultValuePipe, UseGuards,
-  Req, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  HttpStatus,
+  HttpCode,
+  ValidationPipe,
+  ParseFloatPipe,
+  NotFoundException,
+  ForbiddenException,
+  UseGuards,
+  Req,
+  UnauthorizedException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { Request } from 'express';
 import { EntregasService } from './entregas.service';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
@@ -12,8 +30,9 @@ import {
 } from './schemas/delivery.schema';
 import { FirebaseAuthGuard } from 'src/auth/firebase-auth/firebase-auth.guard';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { AuthGuard } from '@nestjs/passport';
-import { Logger } from '@nestjs/common';
+import { FlexibleAuthGuard } from 'src/auth/flexible-auth.guard';
+import { RejeicaoDto } from './dto/rejeicao.dto';
+import { InstalandoDto } from './dto/instalando.dto';
 
 const logger = new Logger('EntregasController');
 
@@ -26,58 +45,106 @@ class SyncLocationDto {
   }[];
 }
 
+interface AuthenticatedUser {
+  sub: string;
+  email?: string;
+  telefone?: string;
+  role: string;
+}
+
 @Controller('entregas')
+@UseGuards(FlexibleAuthGuard)
 export class EntregasController {
   constructor(private readonly entregasService: EntregasService) {}
 
   @Post('localizacoes/sync')
-  @UseGuards(JwtAuthGuard) 
-  async syncLocations(@Body() syncLocationDto: SyncLocationDto, @Req() req) {
+  async syncLocations(
+    @Body() syncLocationDto: SyncLocationDto,
+    @Req() req: Request,
+  ) {
     const user = (req as any).user;
-    logger.debug(`Handler <NOME> → req.user: ${user ? JSON.stringify({sub: user.sub}) : 'none'}`);
-    if (!user?.sub) throw new UnauthorizedException('Token inválido ou ausente');
+    logger.debug(
+      `Handler syncLocations → req.user: ${
+        user ? JSON.stringify({ sub: user.sub }) : 'none'
+      }`,
+    );
 
+    if (!user?.sub) {
+      throw new UnauthorizedException('Token inválido ou ausente');
+    }
+
+    if (
+      !syncLocationDto?.locations ||
+      !Array.isArray(syncLocationDto.locations)
+    ) {
+      throw new BadRequestException('Payload de localizações inválido');
+    }
+
+    await this.entregasService.bulkUpdateDriverLocations(
+      user.sub,
+      syncLocationDto.locations,
+    );
+    return { success: true };
   }
 
-  // --- ROTAS PARA ENTREGADORES (Protegidas por JWT) ---
-
   @Get('minhas-entregas')
-  @UseGuards(AuthGuard('jwt')) 
   async findMyDeliveries(@Req() request: Request) {
-    const driver = request.user as any; 
-    
+    const driver = request.user as any;
+
     if (!driver || !driver.sub) {
       throw new NotFoundException('ID do entregador não encontrado no token.');
     }
-    
+
     return this.entregasService.findAllByDriverId(driver.sub);
   }
 
   @Get('detalhes/:id')
-  @UseGuards(JwtAuthGuard)
-  async findDeliveryDetailsForDriver(@Param('id') id: string, @Req() request: Request) {
+  async findDeliveryDetailsForDriver(
+    @Param('id') id: string,
+    @Req() request: Request,
+  ) {
     const delivery = await this.entregasService.findOne(id);
-    if (!delivery) throw new NotFoundException(`Entrega com ID "${id}" não encontrada.`);
-    
-    const driver = request.user as any;
-    if (!delivery.driverId) throw new UnauthorizedException('Esta entrega não está atribuída a nenhum entregador.');
+    if (!delivery) {
+      throw new NotFoundException(`Entrega com ID "${id}" não encontrada.`);
+    }
 
-    if (delivery.driverId._id.toString() !== driver.sub.toString()) {
-      throw new UnauthorizedException('Você não tem permissão para ver os detalhes desta entrega.');
+    const driver = request.user as any;
+    if (!delivery.driverId) {
+      throw new UnauthorizedException(
+        'Esta entrega não está atribuída a nenhum entregador.',
+      );
+    }
+
+    const assigned =
+      (delivery.driverId as any)?._id?.toString() ??
+      (delivery.driverId as any)?.toString() ??
+      null;
+
+    if (assigned !== driver.sub.toString()) {
+      throw new UnauthorizedException(
+        'Você não tem permissão para ver os detalhes desta entrega.',
+      );
     }
     return delivery;
   }
 
   @Get('detalhes/:id/directions')
-  @UseGuards(JwtAuthGuard)
   async getDeliveryDirectionsForDriver(
     @Param('id') id: string,
     @Req() request: Request,
   ) {
     const delivery = await this.entregasService.findOne(id);
     const driver = request.user as any;
-    if (!delivery) throw new NotFoundException('Entrega não encontrada.');
-    if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
+    if (!delivery) {
+      throw new NotFoundException('Entrega não encontrada.');
+    }
+
+    const assigned =
+      (delivery.driverId as any)?._id?.toString() ??
+      (delivery.driverId as any)?.toString() ??
+      null;
+
+    if (!assigned || assigned !== driver.sub.toString()) {
       throw new UnauthorizedException(
         'Você não tem permissão para ver a rota desta entrega.',
       );
@@ -86,7 +153,7 @@ export class EntregasController {
     let originCoords: Coordinates;
     let destinationCoords: Coordinates;
     if (
-      delivery.status.toUpperCase() === 'ON_THE_WAY' &&
+      delivery.status === DeliveryStatus.A_CAMINHO &&
       delivery.driverCurrentLocation
     ) {
       originCoords = delivery.driverCurrentLocation;
@@ -102,120 +169,114 @@ export class EntregasController {
     return { polyline };
   }
 
-  @Patch(':id/aceitar')
+  @Post(':id/recusar')
   @UseGuards(JwtAuthGuard)
+  async recusarEntrega(
+    @Param('id') deliveryId: string,
+    @Req() request: { user: AuthenticatedUser },
+    @Body() rejeicaoDto: RejeicaoDto,
+  ) {
+    const driverId = request.user.sub;
+    return this.entregasService.recusarEntrega(
+      deliveryId,
+      driverId,
+      rejeicaoDto,
+    );
+  }
+
+  @Patch(':id/aceitar')
   async acceptDelivery(@Param('id') id: string, @Req() request: Request) {
-    const delivery = await this.entregasService.findOne(id);
     const driver = request.user as any;
 
-    if (!delivery) throw new NotFoundException('Entrega não encontrada.');
-    if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
-      throw new UnauthorizedException(
-        'Você não tem permissão para modificar esta entrega.',
-      );
+    if (!driver || !driver.sub) {
+      throw new NotFoundException('ID do entregador não encontrado no token.');
     }
 
-    if (delivery.status !== DeliveryStatus.PENDING) {
-      throw new ForbiddenException(
-        'Apenas entregas pendentes podem ser aceitas.',
-      );
-    }
-
-    return this.entregasService.update(id, { status: DeliveryStatus.ACCEPTED });
+    return this.entregasService.acceptDelivery(id, driver.sub);
   }
 
   @Patch(':id/coletar')
-  @UseGuards(JwtAuthGuard)
   async collectItem(@Param('id') id: string, @Req() request: Request) {
-    const delivery = await this.entregasService.findOne(id);
     const driver = request.user as any;
+    return this.entregasService.collectItem(id, driver.sub);
+  }
 
-    if (!delivery) throw new NotFoundException('Entrega não encontrada.');
-    if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()) {
-      throw new UnauthorizedException(
-        'Você não tem permissão para modificar esta entrega.',
-      );
-    }
+  @Patch(':id/liberar-checkin')
+  @UseGuards(JwtAuthGuard)
+  async liberarCheckIn(
+    @Param('id') deliveryId: string,
+    @Req() request: { user: AuthenticatedUser },
+  ) {
+    const lojistaId = request.user.sub;
+    return this.entregasService.liberarCheckInManual(deliveryId, lojistaId);
+  }
 
-    if (delivery.status !== DeliveryStatus.ACCEPTED) {
-      throw new ForbiddenException(
-        'Apenas entregas com status "accepted" podem ser coletadas.',
-      );
-    }
-
-    return this.entregasService.update(id, {
-      status: DeliveryStatus.ON_THE_WAY,
-    });
+  @Post(':id/instalando')
+  @UseGuards(JwtAuthGuard)
+  async realizarInstalacao(
+    @Param('id') deliveryId: string,
+    @Req() request: { user: AuthenticatedUser },
+    @Body() instalandoDto: InstalandoDto,
+  ) {
+    const driverId = request.user.sub
+    return this.entregasService.realizarCheckIn(deliveryId, driverId, instalandoDto)
   }
 
   @Patch(':id/finalizar')
   @UseGuards(JwtAuthGuard)
   async finishDelivery(@Param('id') id: string, @Req() request: Request) {
-    const delivery = await this.entregasService.findOne(id);
     const driver = request.user as any;
-
-    if (!delivery) throw new NotFoundException('Entrega não encontrada.');
-    if (!delivery.driverId || delivery.driverId._id.toString() !== driver.sub.toString()){
-      throw new UnauthorizedException(
-        'Você não tem permissão para modificar esta entrega.',
-      );
-    }
-
-    if (delivery.status !== DeliveryStatus.ON_THE_WAY) {
-      throw new ForbiddenException(
-        'Apenas entregas "a caminho" podem ser finalizadas.',
-      );
-    }
-
-    return this.entregasService.update(id, {
-      status: DeliveryStatus.DELIVERED,
-    });
+    return this.entregasService.finishDelivery(id, driver.sub);
   }
 
-  // --- ROTAS PARA ADMINISTRADORES (Protegidas por Firebase) ---
-
   @Post()
-  @UseGuards(FirebaseAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   async create(
     @Body(new ValidationPipe()) createDeliveryDto: CreateDeliveryDto,
+    @Req() req: { user: AuthenticatedUser },
   ): Promise<Delivery> {
-    return this.entregasService.create(createDeliveryDto);
+    const lojistaId = req.user.sub;
+    return this.entregasService.create(createDeliveryDto, lojistaId);
   }
 
   @Get()
-  @UseGuards(FirebaseAuthGuard)
   async findAll(
-    @Query(
-      'status',
-      new DefaultValuePipe(''),
-      new ParseArrayPipe({ separator: ',', optional: true }),
-    )
-    statusStrings: string[],
+    @Req() req: { user: AuthenticatedUser },
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 8,
-  ): Promise<{
-    deliveries: Delivery[];
-    total: number;
-    page: number;
-    limit: number;
-  }> {
-    const statuses: DeliveryStatus[] = statusStrings
-      .filter((s) =>
-        Object.values(DeliveryStatus).includes(s as DeliveryStatus),
-      )
-      .map((s) => s as DeliveryStatus);
-    return this.entregasService.findFilteredAndPaginated(statuses, page, limit);
+    @Query('status') status?: string,
+  ) {
+    const user = req.user;
+
+    if (user.role === 'admin') {
+      return this.entregasService.findAll({ page, limit, status });
+    } else {
+      const lojistaId = user.sub;
+      return this.entregasService.findAllBySolicitanteId(
+        lojistaId,
+        page,
+        limit,
+        status,
+      );
+    }
+  }
+
+  @Get()
+  async findAllByLojista(
+    @Req() req: { user: AuthenticatedUser },
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 8,
+  ) {
+    const lojistaId = req.user.sub;
+    return this.entregasService.findAllBySolicitanteId(lojistaId, page, limit);
   }
 
   @Get(':id')
-  @UseGuards(FirebaseAuthGuard)
   async findOne(@Param('id') id: string): Promise<Delivery> {
     return this.entregasService.findOne(id);
   }
 
   @Patch(':id')
-  @UseGuards(FirebaseAuthGuard)
   async update(
     @Param('id') id: string,
     @Body(new ValidationPipe()) updateDeliveryDto: UpdateDeliveryDto,
@@ -224,7 +285,6 @@ export class EntregasController {
   }
 
   @Post(':id/route-point')
-  @UseGuards(FirebaseAuthGuard)
   @HttpCode(HttpStatus.OK)
   async addRoutePoint(
     @Param('id') id: string,
@@ -235,14 +295,12 @@ export class EntregasController {
   }
 
   @Delete(':id')
-  @UseGuards(FirebaseAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(@Param('id') id: string): Promise<void> {
     await this.entregasService.delete(id);
   }
 
   @Patch(':id/driver-location')
-  @UseGuards(FirebaseAuthGuard)
   @HttpCode(HttpStatus.OK)
   async updateDriverLocation(
     @Param('id') id: string,
@@ -253,7 +311,6 @@ export class EntregasController {
   }
 
   @Get(':id/directions')
-  @UseGuards(FirebaseAuthGuard)
   async getDeliveryDirections(
     @Param('id') id: string,
   ): Promise<{ polyline: string }> {
@@ -266,7 +323,7 @@ export class EntregasController {
     let originCoords: Coordinates;
     let destinationCoords: Coordinates;
     if (
-      delivery.status === DeliveryStatus.ON_THE_WAY &&
+      delivery.status === DeliveryStatus.A_CAMINHO &&
       delivery.driverCurrentLocation
     ) {
       originCoords = delivery.driverCurrentLocation;

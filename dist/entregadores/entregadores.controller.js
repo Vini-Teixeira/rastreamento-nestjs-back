@@ -20,23 +20,31 @@ const driver_login_dto_1 = require("../auth/dto/driver-login.dto");
 const create_entregador_dto_1 = require("./dto/create-entregador.dto");
 const update_entregador_dto_1 = require("./dto/update-entregador.dto");
 const update_location_dto_1 = require("./dto/update-location.dto");
-const firebase_auth_guard_1 = require("../auth/firebase-auth/firebase-auth.guard");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const admin_auth_guard_1 = require("../auth/guards/admin-auth.guard");
+const update_fcm_token_dto_1 = require("./dto/update-fcm-token.dto");
 const logger = new common_1.Logger('EntregadoresController');
 let EntregadoresController = class EntregadoresController {
     constructor(entregadoresService, authService) {
         this.entregadoresService = entregadoresService;
         this.authService = authService;
     }
+    async heartbeat(request) {
+        const driverId = request.user.sub;
+        await this.entregadoresService.updateHeartbeat(driverId);
+    }
     async login(driverLoginDto) {
         const driver = await this.entregadoresService.validatePassword(driverLoginDto.telefone, driverLoginDto.password);
         if (!driver) {
             throw new common_1.UnauthorizedException('Telefone ou senha inválidos.');
         }
-        if (!driver.ativo) {
-            throw new common_1.UnauthorizedException('Este entregador está inativo.');
-        }
+        await this.entregadoresService.markAsActive(driver._id.toString());
+        driver.ativo = true;
         return this.authService.loginDriver(driver);
+    }
+    async logout(request) {
+        const driverId = request.user.sub;
+        await this.entregadoresService.registerLogout(driverId);
     }
     async updateMyLocation(req, updateLocationDto) {
         const authHeader = req.headers?.authorization;
@@ -57,11 +65,15 @@ let EntregadoresController = class EntregadoresController {
             throw err;
         }
     }
+    async getMyJobs(request) {
+        const driverId = request.user.sub;
+        return this.entregadoresService.findMyJobs(driverId);
+    }
+    async findAll(page = 1, limit = 10) {
+        return this.entregadoresService.findAll({ page, limit });
+    }
     async create(createEntregadorDto) {
         return this.entregadoresService.create(createEntregadorDto);
-    }
-    async findAll() {
-        return this.entregadoresService.findAll();
     }
     async findOne(id) {
         const found = await this.entregadoresService.findOne(id);
@@ -82,8 +94,21 @@ let EntregadoresController = class EntregadoresController {
         }
         return { message: 'Removido com sucesso' };
     }
+    async updateFcmToken(request, updateFcmTokenDto) {
+        const driverId = request.user.sub;
+        await this.entregadoresService.updateFcmToken(driverId, updateFcmTokenDto.fcmToken);
+    }
 };
 exports.EntregadoresController = EntregadoresController;
+__decorate([
+    (0, common_1.Patch)('me/heartbeat'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], EntregadoresController.prototype, "heartbeat", null);
 __decorate([
     (0, common_1.Post)('login'),
     __param(0, (0, common_1.Body)(new common_1.ValidationPipe())),
@@ -91,6 +116,15 @@ __decorate([
     __metadata("design:paramtypes", [driver_login_dto_1.DriverLoginDto]),
     __metadata("design:returntype", Promise)
 ], EntregadoresController.prototype, "login", null);
+__decorate([
+    (0, common_1.Patch)('me/logout'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], EntregadoresController.prototype, "logout", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Patch)('me/location'),
@@ -102,7 +136,24 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], EntregadoresController.prototype, "updateMyLocation", null);
 __decorate([
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
+    (0, common_1.Get)('meus-trabalhos'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], EntregadoresController.prototype, "getMyJobs", null);
+__decorate([
+    (0, common_1.Get)(),
+    (0, common_1.UseGuards)(admin_auth_guard_1.AdminAuthGuard),
+    __param(0, (0, common_1.Query)('page')),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Number]),
+    __metadata("design:returntype", Promise)
+], EntregadoresController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.UseGuards)(admin_auth_guard_1.AdminAuthGuard),
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)(new common_1.ValidationPipe())),
     __metadata("design:type", Function),
@@ -110,14 +161,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], EntregadoresController.prototype, "create", null);
 __decorate([
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
-    (0, common_1.Get)(),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], EntregadoresController.prototype, "findAll", null);
-__decorate([
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
+    (0, common_1.UseGuards)(admin_auth_guard_1.AdminAuthGuard),
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
@@ -125,7 +169,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], EntregadoresController.prototype, "findOne", null);
 __decorate([
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
+    (0, common_1.UseGuards)(admin_auth_guard_1.AdminAuthGuard),
     (0, common_1.Put)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)(new common_1.ValidationPipe())),
@@ -134,13 +178,23 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], EntregadoresController.prototype, "update", null);
 __decorate([
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
+    (0, common_1.UseGuards)(admin_auth_guard_1.AdminAuthGuard),
     (0, common_1.Delete)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], EntregadoresController.prototype, "delete", null);
+__decorate([
+    (0, common_1.Patch)('me/fcm-token'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, update_fcm_token_dto_1.UpdateFcmTokenDto]),
+    __metadata("design:returntype", Promise)
+], EntregadoresController.prototype, "updateFcmToken", null);
 exports.EntregadoresController = EntregadoresController = __decorate([
     (0, common_1.Controller)('entregadores'),
     __metadata("design:paramtypes", [entregadores_service_1.EntregadoresService,

@@ -11,22 +11,32 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var GeocodingController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GeocodingController = void 0;
 const common_1 = require("@nestjs/common");
 const google_maps_service_1 = require("../google-maps/google-maps.service");
-const firebase_auth_guard_1 = require("../auth/firebase-auth/firebase-auth.guard");
-let GeocodingController = class GeocodingController {
+const flexible_auth_guard_1 = require("../auth/flexible-auth.guard");
+let GeocodingController = GeocodingController_1 = class GeocodingController {
     constructor(googleMapsService) {
         this.googleMapsService = googleMapsService;
+        this.logger = new common_1.Logger(GeocodingController_1.name);
     }
     async getCoordsFromAddress(address) {
-        console.log('--- [DEBUG] GeocodingController recebeu o endereço: ---', address);
-        console.log('----------------------------------------------------');
-        if (!address) {
-            return { lat: 0, lng: 0 };
+        this.logger.debug(`GeocodingController recebeu o endereço: ${address}`);
+        if (!address || address.trim().length === 0) {
+            this.logger.debug('Endereço vazio recebido — retornando ponto (0,0)');
+            return { type: 'Point', coordinates: [0, 0] };
         }
-        return this.googleMapsService.geocodeAddress(address);
+        try {
+            const coords = await this.googleMapsService.geocodeAddress(address);
+            this.logger.debug(`GeocodingController retornando: ${JSON.stringify(coords)}`);
+            return coords;
+        }
+        catch (err) {
+            this.logger.error('Erro no geocoding', err);
+            return { type: 'Point', coordinates: [0, 0] };
+        }
     }
 };
 exports.GeocodingController = GeocodingController;
@@ -37,9 +47,9 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], GeocodingController.prototype, "getCoordsFromAddress", null);
-exports.GeocodingController = GeocodingController = __decorate([
+exports.GeocodingController = GeocodingController = GeocodingController_1 = __decorate([
     (0, common_1.Controller)('geocoding'),
-    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
+    (0, common_1.UseGuards)(flexible_auth_guard_1.FlexibleAuthGuard),
     __metadata("design:paramtypes", [google_maps_service_1.GoogleMapsService])
 ], GeocodingController);
 //# sourceMappingURL=geocoding.controller.js.map

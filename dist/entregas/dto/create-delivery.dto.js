@@ -51,6 +51,7 @@ __decorate([
     (0, class_validator_1.ValidateNested)(),
     (0, class_transformer_1.Type)(() => OriginLocationDto),
     (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", OriginLocationDto)
 ], CreateDeliveryDto.prototype, "origin", void 0);
 __decorate([
@@ -69,4 +70,9 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], CreateDeliveryDto.prototype, "itemDescription", void 0);
+__decorate([
+    (0, class_validator_1.IsMongoId)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreateDeliveryDto.prototype, "origemId", void 0);
 //# sourceMappingURL=create-delivery.dto.js.map

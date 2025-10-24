@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EntregadorSchema = exports.Entregador = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
+const mongoose_2 = require("mongoose");
 const bcrypt = require("bcrypt");
 let Entregador = class Entregador {
 };
@@ -36,14 +37,35 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Entregador.prototype, "emEntrega", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ type: Number, required: true, default: 0 }),
+    __metadata("design:type", Number)
+], Entregador.prototype, "recusasConsecutivas", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Date, required: false, default: null }),
+    __metadata("design:type", Date)
+], Entregador.prototype, "lastHeartbeat", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: String, required: false }),
+    __metadata("design:type", String)
+], Entregador.prototype, "horarioTrabalho", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'Lojista', required: false, default: null }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Entregador.prototype, "lojaBaseId", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ type: Object, required: false }),
     __metadata("design:type", Object)
 ], Entregador.prototype, "localizacao", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: String, required: false, index: true }),
+    __metadata("design:type", String)
+], Entregador.prototype, "fcmToken", void 0);
 exports.Entregador = Entregador = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true, collection: 'entregadores' })
 ], Entregador);
-exports.EntregadorSchema = mongoose_1.SchemaFactory.createForClass(Entregador)
-    .index({ localizacao: '2dsphere' });
+exports.EntregadorSchema = mongoose_1.SchemaFactory.createForClass(Entregador).index({
+    localizacao: '2dsphere',
+});
 exports.EntregadorSchema.pre('save', async function (next) {
     if (!this.isModified('password')) {
         return next();

@@ -36,12 +36,12 @@ class DestinationLocationDto {
     address: string;
 }
 
-
 export class CreateDeliveryDto {
   @ValidateNested()
   @Type(() => OriginLocationDto) 
   @IsNotEmpty()
-  origin: OriginLocationDto;
+  @IsOptional()
+  origin?: OriginLocationDto;
 
   @IsOptional()
   @IsMongoId({ message: 'O ID do entregador deve ser um MongoID válido.' })
@@ -55,4 +55,8 @@ export class CreateDeliveryDto {
   @IsString()
   @IsNotEmpty()
   itemDescription: string;
+
+  @IsMongoId()
+  @IsOptional()
+  origemId?: string
 }

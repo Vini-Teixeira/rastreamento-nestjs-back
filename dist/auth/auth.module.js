@@ -10,17 +10,22 @@ exports.AuthModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const auth_service_1 = require("./auth.service");
+const auth_controller_1 = require("./auth.controller");
 const jwt_1 = require("@nestjs/jwt");
 const jwt_strategy_1 = require("./jwt.strategy");
+const firebase_module_1 = require("./firebase.module");
 const passport_1 = require("@nestjs/passport");
 const jwt_auth_guard_1 = require("./jwt-auth.guard");
+const firebase_auth_guard_1 = require("./firebase-auth/firebase-auth.guard");
+const flexible_auth_guard_1 = require("./flexible-auth.guard");
 const ws_auth_guard_1 = require("./guards/ws-auth.guard");
+const admin_module_1 = require("../admin/admin.module");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
 exports.AuthModule = AuthModule = __decorate([
     (0, common_1.Module)({
-        imports: [
+        imports: [firebase_module_1.FirebaseModule,
             passport_1.PassportModule.register({ defaultStrategy: 'jwt' }),
             jwt_1.JwtModule.registerAsync({
                 imports: [config_1.ConfigModule],
@@ -30,10 +35,10 @@ exports.AuthModule = AuthModule = __decorate([
                     signOptions: { expiresIn: '7d' },
                 }),
             }),
-        ],
-        controllers: [],
-        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy, jwt_auth_guard_1.JwtAuthGuard, ws_auth_guard_1.WsAuthGuard],
-        exports: [auth_service_1.AuthService, passport_1.PassportModule, jwt_1.JwtModule, jwt_auth_guard_1.JwtAuthGuard, ws_auth_guard_1.WsAuthGuard],
+            admin_module_1.AdminModule],
+        controllers: [auth_controller_1.AuthController],
+        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy, jwt_auth_guard_1.JwtAuthGuard, firebase_auth_guard_1.FirebaseAuthGuard, flexible_auth_guard_1.FlexibleAuthGuard, ws_auth_guard_1.WsAuthGuard],
+        exports: [auth_service_1.AuthService, passport_1.PassportModule, jwt_1.JwtModule, jwt_auth_guard_1.JwtAuthGuard, firebase_auth_guard_1.FirebaseAuthGuard, flexible_auth_guard_1.FlexibleAuthGuard, ws_auth_guard_1.WsAuthGuard],
     })
 ], AuthModule);
 //# sourceMappingURL=auth.module.js.map

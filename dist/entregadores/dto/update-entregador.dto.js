@@ -35,4 +35,14 @@ __decorate([
     (0, class_validator_1.MinLength)(6, { message: 'A senha deve ter no mínimo 6 caracteres.' }),
     __metadata("design:type", String)
 ], UpdateEntregadorDto.prototype, "password", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], UpdateEntregadorDto.prototype, "horarioTrabalho", void 0);
+__decorate([
+    (0, class_validator_1.IsMongoId)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], UpdateEntregadorDto.prototype, "lojaBaseId", void 0);
 //# sourceMappingURL=update-entregador.dto.js.map

@@ -9,28 +9,39 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DeliverySchema = exports.Delivery = exports.LocationSchema = exports.Location = exports.CoordinatesSchema = exports.Coordinates = exports.DeliveryStatus = void 0;
+exports.DeliverySchema = exports.Delivery = exports.RejeicaoInfoSchema = exports.LocationSchema = exports.Location = exports.CoordinatesSchema = exports.Coordinates = exports.DeliveryStatus = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
+const rejeicao_dto_1 = require("../dto/rejeicao.dto");
 var DeliveryStatus;
 (function (DeliveryStatus) {
-    DeliveryStatus["PENDING"] = "pending";
-    DeliveryStatus["ACCEPTED"] = "accepted";
-    DeliveryStatus["ON_THE_WAY"] = "on_the_way";
-    DeliveryStatus["DELIVERED"] = "delivered";
-    DeliveryStatus["CANCELLED"] = "cancelled";
+    DeliveryStatus["PENDENTE"] = "pendente";
+    DeliveryStatus["ACEITO"] = "aceito";
+    DeliveryStatus["A_CAMINHO"] = "a_caminho";
+    DeliveryStatus["INSTALANDO"] = "instalando";
+    DeliveryStatus["ENTREGUE"] = "entregue";
+    DeliveryStatus["CANCELADO"] = "cancelado";
 })(DeliveryStatus || (exports.DeliveryStatus = DeliveryStatus = {}));
 let Coordinates = class Coordinates {
 };
 exports.Coordinates = Coordinates;
 __decorate([
-    (0, mongoose_1.Prop)({ required: true }),
-    __metadata("design:type", Number)
-], Coordinates.prototype, "lat", void 0);
+    (0, mongoose_1.Prop)({ required: true, enum: ['Point'], default: 'Point' }),
+    __metadata("design:type", String)
+], Coordinates.prototype, "type", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: true }),
-    __metadata("design:type", Number)
-], Coordinates.prototype, "lng", void 0);
+    (0, mongoose_1.Prop)({
+        required: true,
+        type: [Number],
+        validate: {
+            validator: (value) => Array.isArray(value) &&
+                value.length === 2 &&
+                value.every((num) => typeof num === 'number'),
+            message: 'Coordinates must be an array of [lng, lat]',
+        },
+    }),
+    __metadata("design:type", Array)
+], Coordinates.prototype, "coordinates", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
@@ -54,7 +65,29 @@ exports.Location = Location = __decorate([
     (0, mongoose_1.Schema)({ _id: false })
 ], Location);
 exports.LocationSchema = mongoose_1.SchemaFactory.createForClass(Location);
-let Delivery = class Delivery {
+let RejeicaoInfo = class RejeicaoInfo {
+};
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], RejeicaoInfo.prototype, "motivo", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], RejeicaoInfo.prototype, "texto", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'Entregador' }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], RejeicaoInfo.prototype, "driverId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], RejeicaoInfo.prototype, "timestamp", void 0);
+RejeicaoInfo = __decorate([
+    (0, mongoose_1.Schema)({ _id: false })
+], RejeicaoInfo);
+exports.RejeicaoInfoSchema = mongoose_1.SchemaFactory.createForClass(RejeicaoInfo);
+let Delivery = class Delivery extends mongoose_2.Document {
 };
 exports.Delivery = Delivery;
 __decorate([
@@ -70,9 +103,21 @@ __decorate([
     __metadata("design:type", String)
 ], Delivery.prototype, "itemDescription", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: String, enum: Object.values(DeliveryStatus), default: DeliveryStatus.PENDING }),
+    (0, mongoose_1.Prop)({
+        type: String,
+        enum: Object.values(DeliveryStatus),
+        default: DeliveryStatus.PENDENTE,
+    }),
     __metadata("design:type", String)
 ], Delivery.prototype, "status", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'Lojista', required: true }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Delivery.prototype, "solicitanteId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'Lojista', required: true }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Delivery.prototype, "origemId", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'Entregador', default: null }),
     __metadata("design:type", mongoose_2.Types.ObjectId)
@@ -85,6 +130,32 @@ __decorate([
     (0, mongoose_1.Prop)({ type: exports.CoordinatesSchema }),
     __metadata("design:type", Coordinates)
 ], Delivery.prototype, "driverCurrentLocation", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({
+        type: String,
+        required: false,
+        unique: true,
+        sparse: true,
+        index: true,
+    }),
+    __metadata("design:type", String)
+], Delivery.prototype, "codigoEntrega", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], Delivery.prototype, "checkInLiberadoManualmente", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: [rejeicao_dto_1.RejeicaoDto], default: [] }),
+    __metadata("design:type", Array)
+], Delivery.prototype, "historicoRejeicoes", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Delivery.prototype, "createdAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Delivery.prototype, "updateAt", void 0);
 exports.Delivery = Delivery = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Delivery);

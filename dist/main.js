@@ -11,8 +11,9 @@ async function bootstrap() {
     app.useGlobalFilters(new all_exceptions_filter_1.AllExceptionsFilter());
     app.enableCors({
         origin: '*',
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-        allowedHeaders: ['Content-Type', 'Authorization'],
+        methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+        credentials: true,
+        allowedHeaders: 'Content-Type, Authorization, Cache-Control, Pragma, Expires',
     });
     app.useGlobalPipes(new common_1.ValidationPipe());
     app.useWebSocketAdapter(new platform_socket_io_1.IoAdapter(app));

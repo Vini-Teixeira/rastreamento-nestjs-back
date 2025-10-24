@@ -1,34 +1,43 @@
 import { OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { EntregasService } from '../entregas/entregas.service';
 import { JwtService } from '@nestjs/jwt';
-import { DeliveryDocument } from 'src/entregas/schemas/delivery.schema';
-type JwtPayload = {
+import { EntregasService } from 'src/entregas/entregas.service';
+export interface JwtPayload {
     sub: string;
-    email?: string;
-    [k: string]: any;
-};
-type AuthenticatedSocket = Socket & {
+    telefone?: string;
+    iat?: number;
+    exp?: number;
+}
+export type AuthenticatedSocket = Socket & {
     user?: JwtPayload;
     data?: {
         user?: JwtPayload;
     };
 };
 export declare class EntregadoresGateway implements OnGatewayConnection, OnGatewayDisconnect {
-    private entregasService;
     private readonly jwtService;
+    private readonly entregasService;
     server: Server;
     private readonly logger;
-    constructor(entregasService: EntregasService, jwtService: JwtService);
+    constructor(jwtService: JwtService, entregasService: EntregasService);
+    private getTokenFromHandshake;
     handleConnection(client: AuthenticatedSocket): Promise<void>;
     handleDisconnect(client: AuthenticatedSocket): void;
-    handleLocationUpdate(client: AuthenticatedSocket, payload: {
+    onJoinDeliveryRoom(client: AuthenticatedSocket, data: {
+        deliveryId: string;
+    }): void;
+    onLeaveDeliveryRoom(client: AuthenticatedSocket, data: {
+        deliveryId: string;
+    }): void;
+    notifyNewDelivery(driverId: string, delivery: any): void;
+    notifyDeliveryStatusChanged(delivery: any): void;
+    emitDriverLocation(deliveryId: string, payload: {
+        driverId: string | null;
+        location: any;
+    }): void;
+    handleLocationUpdate(data: {
         deliveryId: string;
         lat: number;
         lng: number;
     }): Promise<void>;
-    notifyNewDelivery(driverId: string, delivery: DeliveryDocument): void;
-    handleJoinDeliveryRoom(client: Socket, deliveryId: string): void;
-    handleLeaveDeliveryRoom(client: Socket, deliveryId: string): void;
 }
-export {};

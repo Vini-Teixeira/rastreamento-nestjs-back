@@ -18,7 +18,17 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
-], CreateLojistaDto.prototype, "nomeCompleto", void 0);
+], CreateLojistaDto.prototype, "nomeFantasia", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateLojistaDto.prototype, "cnpj", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateLojistaDto.prototype, "endereco", void 0);
 __decorate([
     (0, class_validator_1.IsEmail)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -26,8 +36,7 @@ __decorate([
 ], CreateLojistaDto.prototype, "email", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    (0, class_validator_1.MinLength)(6, { message: 'A senha deve ter no mínimo 6 caracteres.' }),
+    (0, class_validator_1.MinLength)(6),
     __metadata("design:type", String)
 ], CreateLojistaDto.prototype, "password", void 0);
 //# sourceMappingURL=create-lojista.dto.js.map

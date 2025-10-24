@@ -3,4 +3,6 @@ export declare class UpdateEntregadorDto {
     telefone?: string;
     ativo?: boolean;
     password?: string;
+    horarioTrabalho?: string;
+    lojaBaseId?: string;
 }

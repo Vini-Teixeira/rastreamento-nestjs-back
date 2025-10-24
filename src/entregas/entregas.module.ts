@@ -7,6 +7,8 @@ import { GoogleMapsModule } from 'src/google-maps/google-maps.module';
 import { EntregadoresModule } from 'src/entregadores/entregadores.module';
 import { Delivery, DeliverySchema } from './schemas/delivery.schema';
 import { FirebaseModule } from 'src/auth/firebase.module';
+import { FcmModule } from 'src/fcm/fcm.module';
+import { LojistasModule } from 'src/lojistas/lojistas.module';
 
 @Module({
   imports: [
@@ -17,9 +19,13 @@ import { FirebaseModule } from 'src/auth/firebase.module';
     GoogleMapsModule,
     forwardRef(() => EntregadoresModule),
     AuthModule,
+    FcmModule,
+    LojistasModule
   ],
   controllers: [EntregasController],
   providers: [EntregasService],
-  exports: [EntregasService]
+  exports: [EntregasService,
+    MongooseModule.forFeature([{ name: Delivery.name, schema: DeliverySchema }])
+  ]
 })
 export class EntregasModule {}

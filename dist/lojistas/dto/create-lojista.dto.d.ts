@@ -1,5 +1,7 @@
 export declare class CreateLojistaDto {
-    nomeCompleto: string;
+    nomeFantasia: string;
+    cnpj: string;
+    endereco: string;
     email: string;
     password: string;
 }

@@ -1,16 +1,19 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
-// O AuthController foi removido ou esvaziado, então não precisamos mais dele aqui.
-// import { AuthController } from './auth.controller'; 
+import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './jwt.strategy';
+import { FirebaseModule } from './firebase.module';
 import { PassportModule } from '@nestjs/passport';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { FirebaseAuthGuard } from './firebase-auth/firebase-auth.guard';
+import { FlexibleAuthGuard } from './flexible-auth.guard';
 import { WsAuthGuard } from './guards/ws-auth.guard';
+import { AdminModule } from 'src/admin/admin.module';
 
 @Module({
-  imports: [
+  imports: [FirebaseModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -20,10 +23,11 @@ import { WsAuthGuard } from './guards/ws-auth.guard';
         signOptions: { expiresIn: '7d' },
       }),
     }),
+    AdminModule
   ],
 
-  controllers: [], 
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, WsAuthGuard],
-  exports: [AuthService, PassportModule, JwtModule, JwtAuthGuard, WsAuthGuard],
+  controllers: [AuthController], 
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, FirebaseAuthGuard, FlexibleAuthGuard, WsAuthGuard],
+  exports: [AuthService, PassportModule, JwtModule, JwtAuthGuard, FirebaseAuthGuard, FlexibleAuthGuard, WsAuthGuard],
 })
 export class AuthModule {}

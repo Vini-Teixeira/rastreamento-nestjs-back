@@ -1,17 +1,12 @@
 import { ConfigService } from '@nestjs/config';
-import { Coordinates as CoordinatesEntity } from 'src/entregas/schemas/delivery.schema';
-interface Coordinates {
-    lat: number;
-    lng: number;
-}
+import { Coordinates } from '../entregas/schemas/delivery.schema';
 export declare class GoogleMapsService {
-    private configService;
+    private readonly configService;
     private readonly logger;
-    private googleMapsApiKey;
-    private googleMapsApiUrl;
-    private readonly geocodingApiUrl;
+    private readonly client;
+    private readonly apiKey;
     constructor(configService: ConfigService);
+    private toLatLng;
+    geocodeAddress(address: string): Promise<Coordinates>;
     getDirections(origin: Coordinates, destination: Coordinates): Promise<string>;
-    geocodeAddress(address: string): Promise<CoordinatesEntity>;
 }
-export {};

@@ -1,99 +1,99 @@
 import {
+  ConnectedSocket,
+  MessageBody,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
-  OnGatewayConnection,
-  OnGatewayDisconnect,
-  WsException,
-  ConnectedSocket,
-  MessageBody,
 } from '@nestjs/websockets';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
-import { Logger, Inject, forwardRef } from '@nestjs/common';
-import { EntregasService } from '../entregas/entregas.service';
 import { JwtService } from '@nestjs/jwt';
-import { DeliveryDocument } from 'src/entregas/schemas/delivery.schema';
+import { EntregasService } from 'src/entregas/entregas.service';
 
-type JwtPayload = { sub: string; email?: string; [k: string]: any };
-type AuthenticatedSocket = Socket & {
-  user?: JwtPayload; // compatibilidade com leituras antigas
-  data?: { user?: JwtPayload }; // socket.io v4 recommended
+export interface JwtPayload {
+  sub: string;
+  telefone?: string;
+  iat?: number;
+  exp?: number;
+}
+
+export type AuthenticatedSocket = Socket & {
+  user?: JwtPayload;
+  data?: { user?: JwtPayload };
 };
 
-@WebSocketGateway({ cors: true })
-export class EntregadoresGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+@WebSocketGateway({
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST', 'PATCH'],
+    allowedHeaders: ['authorization', 'content-type'],
+    credentials: true,
+  },
+  transports: ['websocket', 'polling'],
+  namespace: '/',
+})
+@Injectable()
+export class EntregadoresGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
-  server: Server;
+  public server: Server;
 
   private readonly logger = new Logger(EntregadoresGateway.name);
 
-  constructor(
+  constructor(private readonly jwtService: JwtService,
     @Inject(forwardRef(() => EntregasService))
-    private entregasService: EntregasService,
-    private readonly jwtService: JwtService
+    private readonly entregasService: EntregasService
   ) {}
 
-  async handleConnection(client: AuthenticatedSocket) {
-    try {
-      // Extrair token de vários locais
-      let token: string | undefined;
-      const handshake: any = client.handshake || {};
+  private getTokenFromHandshake(client: AuthenticatedSocket): string | undefined {
+    const handshake: any = client.handshake || {};
+    if (handshake.auth && handshake.auth.token) {
+      return String(handshake.auth.token);
+    }
+    if (handshake.query && handshake.query.token) {
+      return String(handshake.query.token);
+    }
+    if (handshake.headers && handshake.headers.authorization) {
+      const authHeader = String(handshake.headers.authorization);
+      return authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    }
+    return undefined;
+  }
 
-      if (handshake.auth && handshake.auth.token) {
-        token = handshake.auth.token;
-      } else if (handshake.query && handshake.query.token) {
-        token = String(handshake.query.token);
-      } else if (handshake.headers && handshake.headers.authorization) {
-        const authHeader = String(handshake.headers.authorization);
-        token = authHeader.startsWith('Bearer ')
-          ? authHeader.slice(7)
-          : authHeader;
-      }
+  async handleConnection(client: AuthenticatedSocket): Promise<void> {
+    try {
+      const token = this.getTokenFromHandshake(client);
 
       if (!token) {
-        this.logger.warn(
-          `Socket connection rejected: no token provided (socketId=${client.id})`
-        );
-        // emite evento específico para cliente poder reagir
+        this.logger.warn(`Socket connection rejected: no token provided (socketId=${client.id})`);
         client.emit('unauthorized', { message: 'Token missing' });
         client.disconnect(true);
         return;
       }
 
-      // verify token de forma assíncrona
       let payload: JwtPayload;
       try {
-        payload = await this.jwtService.verifyAsync(token);
+        payload = await this.jwtService.verifyAsync<JwtPayload>(token);
       } catch (err) {
-        this.logger.warn(
-          `Socket connection rejected: invalid token (socketId=${client.id})`
-        );
+        this.logger.warn(`Socket connection rejected: invalid token (socketId=${client.id})`);
         client.emit('unauthorized', { message: 'Token invalid' });
         client.disconnect(true);
         return;
       }
 
-      // Anexar em ambos locais para compatibilidade:
-      (client as any).data = (client as any).data ?? {};
-      (client as any).data.user = payload;
-      (client as any).user = payload; // muitos handlers ainda leem client.user
+      client.data = client.data ?? {};
+      client.data.user = payload;
+      (client as any).user = payload;
 
-      // Entrar na sala do driver para receber "nova_entrega"
       try {
         client.join(payload.sub);
       } catch (err) {
-        this.logger.warn(
-          `Não foi possível adicionar cliente à sala do driver (${payload.sub}): ${err}`
-        );
+        this.logger.warn(`Não foi possível adicionar cliente à sala do driver (${payload.sub}): ${err}`);
       }
 
-      this.logger.log(
-        `Socket conectado: user=${payload.sub} socketId=${client.id}`
-      );
+      this.logger.log(`Socket conectado: user=${payload.sub} socketId=${client.id}`);
     } catch (err) {
-      // Catch-all para evitar uncaught exceptions que derrubem o processo
       this.logger.error('Unexpected error in handleConnection', err as any);
       try {
         client.disconnect(true);
@@ -101,81 +101,111 @@ export class EntregadoresGateway
     }
   }
 
-  handleDisconnect(@ConnectedSocket() client: AuthenticatedSocket) {
-    // ler payload do lugar seguro (data.user) com fallback para user
-    const user = (client as any).data?.user ?? (client as any).user;
-    const driverId = user ? user.sub : 'não autenticado';
-    this.logger.log(
-      `Cliente Desconectado: ${client.id} (Entregador: ${driverId})`
+  handleDisconnect(client: AuthenticatedSocket): void {
+    const u = client.data?.user?.sub ? `user=${client.data.user.sub}` : 'Entregador: não autenticado';
+    this.logger.log(`Cliente Desconectado: ${client.id} (${u})`);
+  }
+
+  @SubscribeMessage('join_delivery')
+  onJoinDeliveryRoom(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() data: { deliveryId: string }): void {
+    const user = client.data?.user;
+    if (!user?.sub) {
+      client.emit('unauthorized', { message: 'Token invalid or missing' });
+      client.disconnect(true);
+      return;
+    }
+    if (!data?.deliveryId) {
+      client.emit('bad_request', { message: 'deliveryId obrigatório' });
+      return;
+    }
+    client.join(data.deliveryId);
+    this.logger.log(`Socket ${client.id} entrou na sala da entrega ${data.deliveryId}`);
+  }
+
+  @SubscribeMessage('leave_delivery')
+  onLeaveDeliveryRoom(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() data: { deliveryId: string }): void {
+    if (!data?.deliveryId) {
+      client.emit('bad_request', { message: 'deliveryId obrigatório' });
+      return;
+    }
+    client.leave(data.deliveryId);
+    this.logger.log(`Socket ${client.id} saiu da sala da entrega ${data.deliveryId}`);
+  }
+
+  notifyNewDelivery(driverId: string, delivery: any): void {
+    try {
+      this.server.to(driverId).emit('nova_entrega', delivery);
+      this.logger.log(`Enviando notificação de nova entrega para a sala do entregador: ${driverId}`);
+    } catch (err) {
+      this.logger.error(`Erro ao notificar nova entrega para driver ${driverId}`, err as any);
+    }
+  }
+
+  notifyDeliveryStatusChanged(delivery: any): void {
+  try {
+    const deliveryId = String(delivery._id ?? delivery.id);
+    const driverId = String(
+      (delivery.driverId as any)?._id ?? (delivery.driverId as any) ?? ''
     );
-    // cleanup adicional se necessário (ex: marcar entregador offline)
+    const storeId = String(
+      (delivery.loja as any)?._id ?? (delivery.loja as any) ?? ''
+    );
+
+    const payload = {
+      deliveryId: deliveryId,
+      status: delivery.status,
+      driverId: driverId,
+      payload: delivery,
+    };
+
+    this.server.to(deliveryId).emit('delivery_updated', payload);
+
+    if (driverId) {
+      this.server.to(driverId).emit('delivery_updated', payload);
+    }
+
+    // 5. (Futuro) Quando o painel do lojista precisar de updates, podemos adicionar:
+    //    if (storeId) {
+    //      this.server.to(storeId).emit('delivery_updated', payload);
+    //    }
+
+    this.logger.log(
+      `Emitindo 'delivery_updated' para a sala da entrega ${deliveryId} com status ${delivery.status}`
+    );
+  } catch (err) {
+    this.logger.error(
+      `Erro ao emitir 'delivery_updated' para a entrega ${String(delivery._id ?? delivery.id)}`,
+      err as any
+    );
+  }
+}
+
+  emitDriverLocation(deliveryId: string, payload: { driverId: string | null; location: any }): void {
+    try {
+      this.server.to(deliveryId).emit('novaLocalizacao', {
+        deliveryId,
+        driverId: payload.driverId,
+        location: payload.location,
+      });
+      this.logger.log(`WS: novaLocalizacao emitida para sala da entrega ${deliveryId}`);
+    } catch (err) {
+      this.logger.error(`Erro ao emitir novaLocalizacao para entrega ${deliveryId}`, err as any);
+    }
   }
 
   @SubscribeMessage('atualizarLocalizacao')
   async handleLocationUpdate(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() payload: { deliveryId: string; lat: number; lng: number },
-  ) {
-    // usar data.user preferencialmente
-    const user = (client as any).data?.user ?? (client as any).user;
-    if (!user) {
-      // caso improvável, rejeitar com erro controlado
-      throw new WsException('Não autenticado');
+    @MessageBody() data : { deliveryId: string, lat: number, lng: number },
+  ): Promise<void> {
+    if(!data || !data.deliveryId) {
+      this.logger.warn('Gateway: Recebida atualização de localização sem dados ou deliveryId.')
+      return
     }
-    const driverIdFromToken = user.sub;
-    this.logger.log(
-      `Recebendo localização do entregador ${driverIdFromToken} para a entrega ${payload.deliveryId}`,
-    );
-
-    try {
-      const delivery = await this.entregasService.findOne(payload.deliveryId);
-
-      if (!delivery) {
-        throw new WsException('Entrega não encontrada');
-      }
-
-      if (!delivery.driverId || delivery.driverId._id.toString() !== driverIdFromToken) {
-        throw new WsException('Ação não autorizada para esta entrega.');
-      }
-
-      await this.entregasService.updateDriverLocation(
-        payload.deliveryId,
-        payload.lat,
-        payload.lng,
-      );
-
-      // opcional: notificar lojista/room da entrega com nova posição
-      this.server.to(payload.deliveryId).emit('driver_location_updated', {
-        deliveryId: payload.deliveryId,
-        lat: payload.lat,
-        lng: payload.lng,
-        driverId: driverIdFromToken,
-      });
-
-    } catch (error: any) {
-      this.logger.error(
-        `Erro ao processar localização para o entregador ${driverIdFromToken}: ${error?.message ?? error}`,
-      );
-      client.emit('erro_localizacao', { message: error?.message ?? String(error) });
-    }
-  }
-
-  notifyNewDelivery(driverId: string, delivery: DeliveryDocument) {
-    this.logger.log(
-      `Enviando notificação de nova entrega para a sala do entregador: ${driverId}`,
-    );
-    this.server.to(driverId).emit('nova_entrega', delivery);
-  }
-
-  @SubscribeMessage('joinDeliveryRoom')
-  handleJoinDeliveryRoom(client: Socket, deliveryId: string) {
-    client.join(deliveryId);
-    this.logger.log(`Cliente ${client.id} entrou na sala da entrega: ${deliveryId}`);
-  }
-
-  @SubscribeMessage('leaveDeliveryRoom')
-  handleLeaveDeliveryRoom(client: Socket, deliveryId: string) {
-    client.leave(deliveryId);
-    this.logger.log(`Cliente ${client.id} saiu da sala da entrega: ${deliveryId}`);
+    this.logger.log(`Gateway: Recebida atualização da localização para a entrega ${data.deliveryId}`)
+    await this.entregasService.updateDriverLocation(
+      data.deliveryId,
+      data.lat,
+      data.lng
+    )
   }
 }
