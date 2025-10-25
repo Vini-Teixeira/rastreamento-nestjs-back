@@ -1,12 +1,5 @@
 import { HydratedDocument, Types, Document as MongooseDocument } from 'mongoose';
-export declare enum DeliveryStatus {
-    PENDENTE = "pendente",
-    ACEITO = "aceito",
-    A_CAMINHO = "a_caminho",
-    INSTALANDO = "instalando",
-    ENTREGUE = "entregue",
-    CANCELADO = "cancelado"
-}
+import { DeliveryStatus } from '../enums/delivery-status.enum';
 export declare class Coordinates {
     type: string;
     coordinates: number[];

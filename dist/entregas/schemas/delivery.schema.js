@@ -9,19 +9,11 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DeliverySchema = exports.Delivery = exports.RejeicaoInfoSchema = exports.LocationSchema = exports.Location = exports.CoordinatesSchema = exports.Coordinates = exports.DeliveryStatus = void 0;
+exports.DeliverySchema = exports.Delivery = exports.RejeicaoInfoSchema = exports.LocationSchema = exports.Location = exports.CoordinatesSchema = exports.Coordinates = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const rejeicao_dto_1 = require("../dto/rejeicao.dto");
-var DeliveryStatus;
-(function (DeliveryStatus) {
-    DeliveryStatus["PENDENTE"] = "pendente";
-    DeliveryStatus["ACEITO"] = "aceito";
-    DeliveryStatus["A_CAMINHO"] = "a_caminho";
-    DeliveryStatus["INSTALANDO"] = "instalando";
-    DeliveryStatus["ENTREGUE"] = "entregue";
-    DeliveryStatus["CANCELADO"] = "cancelado";
-})(DeliveryStatus || (exports.DeliveryStatus = DeliveryStatus = {}));
+const delivery_status_enum_1 = require("../enums/delivery-status.enum");
 let Coordinates = class Coordinates {
 };
 exports.Coordinates = Coordinates;
@@ -105,8 +97,8 @@ __decorate([
 __decorate([
     (0, mongoose_1.Prop)({
         type: String,
-        enum: Object.values(DeliveryStatus),
-        default: DeliveryStatus.PENDENTE,
+        enum: Object.values(delivery_status_enum_1.DeliveryStatus),
+        default: delivery_status_enum_1.DeliveryStatus.PENDENTE,
     }),
     __metadata("design:type", String)
 ], Delivery.prototype, "status", void 0);

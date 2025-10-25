@@ -7,6 +7,7 @@ import { UpdateEntregadorDto } from './dto/update-entregador.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import * as bcrypt from 'bcrypt';
 import { Delivery } from 'src/entregas/schemas/delivery.schema';
+import { DeliveryStatus } from 'src/entregas/enums/delivery-status.enum';
 import { Socorro } from 'src/socorros/schemas/socorro.schema';
 import { PontoHistoryService } from 'src/ponto-history/ponto-history.service';
 import { PontoAction } from 'src/ponto-history/schemas/ponto-history.schema';
@@ -181,16 +182,11 @@ async update(
 
   async findMyJobs(driverId: string) {
     const activeStatuses = [
-      'pending',
-      'accepted',
-      'on_the_way',
-      'instalando',
-      'on_site',
-      'pendente',
-      'aceito',
-      'à_caminho',
-      'no_local',
-    ];
+    DeliveryStatus.PENDENTE,
+    DeliveryStatus.ACEITO,
+    DeliveryStatus.A_CAMINHO,
+    DeliveryStatus.EM_ATENDIMENTO,
+  ];
 
     const driverObjectId = new Types.ObjectId(driverId);
     const [deliveries, socorros] = await Promise.all([

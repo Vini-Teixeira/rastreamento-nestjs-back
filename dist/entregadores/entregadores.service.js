@@ -20,6 +20,7 @@ const mongoose_2 = require("mongoose");
 const entregador_schema_1 = require("./schemas/entregador.schema");
 const bcrypt = require("bcrypt");
 const delivery_schema_1 = require("../entregas/schemas/delivery.schema");
+const delivery_status_enum_1 = require("../entregas/enums/delivery-status.enum");
 const socorro_schema_1 = require("../socorros/schemas/socorro.schema");
 const ponto_history_service_1 = require("../ponto-history/ponto-history.service");
 const ponto_history_schema_1 = require("../ponto-history/schemas/ponto-history.schema");
@@ -142,15 +143,10 @@ let EntregadoresService = EntregadoresService_1 = class EntregadoresService {
     }
     async findMyJobs(driverId) {
         const activeStatuses = [
-            'pending',
-            'accepted',
-            'on_the_way',
-            'instalando',
-            'on_site',
-            'pendente',
-            'aceito',
-            'à_caminho',
-            'no_local',
+            delivery_status_enum_1.DeliveryStatus.PENDENTE,
+            delivery_status_enum_1.DeliveryStatus.ACEITO,
+            delivery_status_enum_1.DeliveryStatus.A_CAMINHO,
+            delivery_status_enum_1.DeliveryStatus.EM_ATENDIMENTO,
         ];
         const driverObjectId = new mongoose_2.Types.ObjectId(driverId);
         const [deliveries, socorros] = await Promise.all([

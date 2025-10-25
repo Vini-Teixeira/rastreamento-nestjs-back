@@ -17,7 +17,7 @@ const common_1 = require("@nestjs/common");
 const entregas_service_1 = require("./entregas.service");
 const create_delivery_dto_1 = require("./dto/create-delivery.dto");
 const update_delivery_dto_1 = require("./dto/update-delivery.dto");
-const delivery_schema_1 = require("./schemas/delivery.schema");
+const delivery_status_enum_1 = require("./enums/delivery-status.enum");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const flexible_auth_guard_1 = require("../auth/flexible-auth.guard");
 const rejeicao_dto_1 = require("./dto/rejeicao.dto");
@@ -80,7 +80,7 @@ let EntregasController = class EntregasController {
         }
         let originCoords;
         let destinationCoords;
-        if (delivery.status === delivery_schema_1.DeliveryStatus.A_CAMINHO &&
+        if (delivery.status === delivery_status_enum_1.DeliveryStatus.A_CAMINHO &&
             delivery.driverCurrentLocation) {
             originCoords = delivery.driverCurrentLocation;
             destinationCoords = delivery.destination.coordinates;
@@ -118,6 +118,10 @@ let EntregasController = class EntregasController {
     async finishDelivery(id, request) {
         const driver = request.user;
         return this.entregasService.finishDelivery(id, driver.sub);
+    }
+    async cancelarEntrega(deliveryId, request) {
+        const lojistaId = request.user.sub;
+        return this.entregasService.cancelarEntrega(deliveryId, lojistaId);
     }
     async create(createDeliveryDto, req) {
         const lojistaId = req.user.sub;
@@ -159,7 +163,7 @@ let EntregasController = class EntregasController {
         }
         let originCoords;
         let destinationCoords;
-        if (delivery.status === delivery_schema_1.DeliveryStatus.A_CAMINHO &&
+        if (delivery.status === delivery_status_enum_1.DeliveryStatus.A_CAMINHO &&
             delivery.driverCurrentLocation) {
             originCoords = delivery.driverCurrentLocation;
             destinationCoords = delivery.destination.coordinates;
@@ -258,6 +262,15 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], EntregasController.prototype, "finishDelivery", null);
+__decorate([
+    (0, common_1.Patch)(':id/cancelar'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], EntregasController.prototype, "cancelarEntrega", null);
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.HttpCode)(common_1.HttpStatus.CREATED),

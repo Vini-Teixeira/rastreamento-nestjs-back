@@ -18,6 +18,7 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const delivery_schema_1 = require("./schemas/delivery.schema");
+const delivery_status_enum_1 = require("./enums/delivery-status.enum");
 const entregador_schema_1 = require("../entregadores/schemas/entregador.schema");
 const google_maps_service_1 = require("../google-maps/google-maps.service");
 const entregadores_gateway_1 = require("../entregadores/entregadores.gateway");
@@ -149,7 +150,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
             solicitanteId: new mongoose_2.Types.ObjectId(solicitanteId),
             origemId: new mongoose_2.Types.ObjectId(idDaLojaDeOrigem),
             itemDescription,
-            status: delivery_schema_1.DeliveryStatus.PENDENTE,
+            status: delivery_status_enum_1.DeliveryStatus.PENDENTE,
             origin: {
                 address: lojaDeOrigem.endereco,
                 coordinates: lojaDeOrigem.coordinates,
@@ -197,7 +198,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
             if (delivery.driverId?.toString() !== driverId) {
                 throw new common_1.ForbiddenException('Você não pode recusar uma entrega que não é sua.');
             }
-            if (delivery.status !== delivery_schema_1.DeliveryStatus.PENDENTE) {
+            if (delivery.status !== delivery_status_enum_1.DeliveryStatus.PENDENTE) {
                 throw new common_1.BadRequestException('Esta entrega não pode mais ser recusada.');
             }
             delivery.historicoRejeicoes.push({
@@ -225,7 +226,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
         this.logger.log(`Verificando timeout para a entrega ${deliveryId} do entregador ${driverId}...`);
         const delivery = await this.deliveryModel.findById(deliveryId);
         if (delivery &&
-            delivery.status === delivery_schema_1.DeliveryStatus.PENDENTE &&
+            delivery.status === delivery_status_enum_1.DeliveryStatus.PENDENTE &&
             delivery.driverId?.toString() === driverId) {
             this.logger.warn(`Timeout! Entregador ${driverId} não respondeu. Recusa automática iniciada.`);
             const rejeicaoDto = {
@@ -259,10 +260,10 @@ let EntregasService = EntregasService_1 = class EntregasService {
             if (assigned && assigned !== driverId) {
                 throw new common_1.ForbiddenException('Entrega atribuída a outro entregador.');
             }
-            if (delivery.status !== delivery_schema_1.DeliveryStatus.PENDENTE) {
+            if (delivery.status !== delivery_status_enum_1.DeliveryStatus.PENDENTE) {
                 throw new common_1.BadRequestException('Entrega não está mais disponível para aceitar.');
             }
-            delivery.status = delivery_schema_1.DeliveryStatus.ACEITO;
+            delivery.status = delivery_status_enum_1.DeliveryStatus.ACEITO;
             delivery.driverId = new mongoose_2.Types.ObjectId(driverId);
             const savedDeliveryPromise = delivery.save({ session });
             const updateDriverPromise = this.entregadorModel
@@ -299,10 +300,10 @@ let EntregasService = EntregasService_1 = class EntregasService {
         if (!assigned || assigned !== driverId) {
             throw new common_1.UnauthorizedException('Você não tem permissão para modificar esta entrega.');
         }
-        if (delivery.status !== delivery_schema_1.DeliveryStatus.ACEITO) {
+        if (delivery.status !== delivery_status_enum_1.DeliveryStatus.ACEITO) {
             throw new common_1.ForbiddenException('Apenas entregas com status "accepted" podem ser coletadas.');
         }
-        delivery.status = delivery_schema_1.DeliveryStatus.A_CAMINHO;
+        delivery.status = delivery_status_enum_1.DeliveryStatus.A_CAMINHO;
         const saved = await delivery.save();
         this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
         return saved;
@@ -316,8 +317,8 @@ let EntregasService = EntregasService_1 = class EntregasService {
             throw new common_1.ForbiddenException('Você não tem permissão para modificar esta entrega');
         }
         const statusPermitidos = [
-            delivery_schema_1.DeliveryStatus.ACEITO,
-            delivery_schema_1.DeliveryStatus.A_CAMINHO,
+            delivery_status_enum_1.DeliveryStatus.ACEITO,
+            delivery_status_enum_1.DeliveryStatus.A_CAMINHO,
         ];
         if (!statusPermitidos.includes(delivery.status)) {
             throw new common_1.BadRequestException(`Não é possível liberar o CheckIn para uma entrega com status "${delivery.status}".`);
@@ -343,7 +344,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
                 !delivery.checkInLiberadoManualmente) {
                 throw new common_1.BadRequestException('Código de confirmação inválido.');
             }
-            delivery.status = delivery_schema_1.DeliveryStatus.INSTALANDO;
+            delivery.status = delivery_status_enum_1.DeliveryStatus.EM_ATENDIMENTO;
             const deliverySavePromise = delivery.save({ session });
             const driverUpdatePromise = this.entregadorModel
                 .updateOne({ _id: driverId }, { $set: { emEntrega: false } }, { session })
@@ -379,10 +380,10 @@ let EntregasService = EntregasService_1 = class EntregasService {
             if (!assigned || assigned !== driverId) {
                 throw new common_1.UnauthorizedException('Você não tem permissão para finalizar esta entrega.');
             }
-            if (delivery.status !== delivery_schema_1.DeliveryStatus.INSTALANDO) {
+            if (delivery.status !== delivery_status_enum_1.DeliveryStatus.EM_ATENDIMENTO) {
                 throw new common_1.ForbiddenException('Apenas entregas "a caminho" podem ser finalizadas.');
             }
-            delivery.status = delivery_schema_1.DeliveryStatus.ENTREGUE;
+            delivery.status = delivery_status_enum_1.DeliveryStatus.FINALIZADO;
             const savedDeliveryPromise = delivery.save({ session });
             const updateDriverPromise = this.entregadorModel
                 .updateOne({ _id: delivery.driverId }, { $set: { emEntrega: false } }, { session })
@@ -403,12 +404,65 @@ let EntregasService = EntregasService_1 = class EntregasService {
             session.endSession();
         }
     }
+    async cancelarEntrega(deliveryId, solicitanteId) {
+        const session = await this.connection.startSession();
+        session.startTransaction();
+        this.logger.log(`Iniciando transação para cancelar entrega ${deliveryId}`);
+        try {
+            const delivery = await this.deliveryModel
+                .findById(deliveryId)
+                .session(session)
+                .exec();
+            if (!delivery) {
+                throw new common_1.NotFoundException(`Entrega com ID "${deliveryId}" não encontrada.`);
+            }
+            if (delivery.solicitanteId.toString() !== solicitanteId) {
+                throw new common_1.ForbiddenException('Você não tem permissão para cancelar esta entrega.');
+            }
+            const nonCancelableStatuses = [
+                delivery_status_enum_1.DeliveryStatus.FINALIZADO,
+                delivery_status_enum_1.DeliveryStatus.CANCELADO,
+            ];
+            if (nonCancelableStatuses.includes(delivery.status)) {
+                throw new common_1.BadRequestException('Esta entrega não pode mais ser cancelada.');
+            }
+            const driverId = delivery.driverId;
+            const driverEstaAtivo = driverId &&
+                [
+                    delivery_status_enum_1.DeliveryStatus.ACEITO,
+                    delivery_status_enum_1.DeliveryStatus.A_CAMINHO,
+                    delivery_status_enum_1.DeliveryStatus.EM_ATENDIMENTO,
+                ].includes(delivery.status);
+            delivery.status = delivery_status_enum_1.DeliveryStatus.CANCELADO;
+            const deliverySavePromise = delivery.save({ session });
+            const promises = [deliverySavePromise];
+            if (driverEstaAtivo) {
+                this.logger.log(`Liberando entregador ${driverId} da entrega cancelada ${deliveryId}.`);
+                promises.push(this.entregadorModel
+                    .updateOne({ _id: driverId }, { $set: { emEntrega: false } }, { session })
+                    .exec());
+            }
+            const [savedDelivery] = await Promise.all(promises);
+            await session.commitTransaction();
+            this.logger.log(`Transação de cancelamento para ${deliveryId} concluída.`);
+            this.entregadoresGateway.notifyDeliveryStatusChanged(savedDelivery);
+            return savedDelivery;
+        }
+        catch (error) {
+            await session.abortTransaction();
+            this.logger.error(`Erro na transação de cancelamento da entrega ${deliveryId}`, error?.stack);
+            throw error;
+        }
+        finally {
+            session.endSession();
+        }
+    }
     async handleStaleDeliveries() {
         this.logger.log('Executando verificação de entregas pendentes...');
         const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
         const staleDeliveries = await this.deliveryModel
             .find({
-            status: delivery_schema_1.DeliveryStatus.PENDENTE,
+            status: delivery_status_enum_1.DeliveryStatus.PENDENTE,
             createdAt: { $lt: oneMinuteAgo },
         })
             .exec();

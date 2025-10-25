@@ -8,6 +8,7 @@ import { Lojista, LojistaDocument } from './schemas/lojista.schema';
 import { GoogleMapsService } from 'src/google-maps/google-maps.service';
 import { Delivery } from 'src/entregas/schemas/delivery.schema';
 import { Socorro } from 'src/socorros/schemas/socorro.schema';
+import { DeliveryStatus } from 'src/entregas/enums/delivery-status.enum';
 
 @Injectable()
 export class LojistasService {
@@ -21,14 +22,29 @@ export class LojistasService {
 async getDashboardSummary(solicitanteId: string) {
   const id = new Types.ObjectId(solicitanteId);
 
+  const statusConcluido = [
+    DeliveryStatus.FINALIZADO
+  ];
+  
+  const statusEmAndamento = [
+    DeliveryStatus.PENDENTE,
+    DeliveryStatus.ACEITO,
+    DeliveryStatus.A_CAMINHO,
+    DeliveryStatus.EM_ATENDIMENTO,
+  ];
+  
+  const statusCancelado = [
+    DeliveryStatus.CANCELADO
+  ];
+
   const deliverySummary = await this.deliveryModel.aggregate([
     { $match: { solicitanteId: id } },
     {
       $group: {
         _id: null,
-        concluidas: { $sum: { $cond: [{ $eq: ['$status', 'entregue'] }, 1, 0] } },
-        emAndamento: { $sum: { $cond: [{ $in: ['$status', ['pendente', 'aceito', 'a_caminho', 'instalando']] }, 1, 0] } },
-        canceladas: { $sum: { $cond: [{ $eq: ['$status', 'cancelado'] }, 1, 0] } },
+        concluidas: { $sum: { $cond: [{ $in: ['$status', statusConcluido] }, 1, 0] } },
+        emAndamento: { $sum: { $cond: [{ $in: ['$status', statusEmAndamento] }, 1, 0] } },
+        canceladas: { $sum: { $cond: [{ $in: ['$status', statusCancelado] }, 1, 0] } },
       },
     },
   ]);
@@ -38,9 +54,9 @@ async getDashboardSummary(solicitanteId: string) {
     {
       $group: {
         _id: null,
-        concluidas: { $sum: { $cond: [{ $eq: ['$status', 'concluído'] }, 1, 0] } },
-        emAndamento: { $sum: { $cond: [{ $in: ['$status', ['pendente', 'aceito', 'à_caminho', 'no_local']] }, 1, 0] } },
-        canceladas: { $sum: { $cond: [{ $eq: ['$status', 'cancelado'] }, 1, 0] } },
+        concluidas: { $sum: { $cond: [{ $in: ['$status', statusConcluido] }, 1, 0] } },
+        emAndamento: { $sum: { $cond: [{ $in: ['$status', statusEmAndamento] }, 1, 0] } },
+        canceladas: { $sum: { $cond: [{ $in: ['$status', statusCancelado] }, 1, 0] } },
       },
     },
   ]);

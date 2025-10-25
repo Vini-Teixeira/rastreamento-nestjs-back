@@ -5,15 +5,7 @@ import {
   Document as MongooseDocument,
 } from 'mongoose';
 import { RejeicaoDto } from '../dto/rejeicao.dto';
-
-export enum DeliveryStatus {
-  PENDENTE = 'pendente',
-  ACEITO = 'aceito',
-  A_CAMINHO = 'a_caminho',
-  INSTALANDO = 'instalando',
-  ENTREGUE = 'entregue',
-  CANCELADO = 'cancelado',
-}
+import { DeliveryStatus } from '../enums/delivery-status.enum';
 
 @Schema({ _id: false })
 export class Coordinates {

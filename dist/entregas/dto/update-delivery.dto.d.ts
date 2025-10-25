@@ -1,4 +1,4 @@
-import { DeliveryStatus } from "../schemas/delivery.schema";
+import { DeliveryStatus } from "../enums/delivery-status.enum";
 export declare class CoordinatesDto {
     lat: number;
     lng: number;

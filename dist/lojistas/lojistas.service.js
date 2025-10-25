@@ -21,6 +21,7 @@ const lojista_schema_1 = require("./schemas/lojista.schema");
 const google_maps_service_1 = require("../google-maps/google-maps.service");
 const delivery_schema_1 = require("../entregas/schemas/delivery.schema");
 const socorro_schema_1 = require("../socorros/schemas/socorro.schema");
+const delivery_status_enum_1 = require("../entregas/enums/delivery-status.enum");
 let LojistasService = class LojistasService {
     constructor(lojistaModel, deliveryModel, socorroModel, googleMapsService) {
         this.lojistaModel = lojistaModel;
@@ -30,14 +31,26 @@ let LojistasService = class LojistasService {
     }
     async getDashboardSummary(solicitanteId) {
         const id = new mongoose_2.Types.ObjectId(solicitanteId);
+        const statusConcluido = [
+            delivery_status_enum_1.DeliveryStatus.FINALIZADO
+        ];
+        const statusEmAndamento = [
+            delivery_status_enum_1.DeliveryStatus.PENDENTE,
+            delivery_status_enum_1.DeliveryStatus.ACEITO,
+            delivery_status_enum_1.DeliveryStatus.A_CAMINHO,
+            delivery_status_enum_1.DeliveryStatus.EM_ATENDIMENTO,
+        ];
+        const statusCancelado = [
+            delivery_status_enum_1.DeliveryStatus.CANCELADO
+        ];
         const deliverySummary = await this.deliveryModel.aggregate([
             { $match: { solicitanteId: id } },
             {
                 $group: {
                     _id: null,
-                    concluidas: { $sum: { $cond: [{ $eq: ['$status', 'entregue'] }, 1, 0] } },
-                    emAndamento: { $sum: { $cond: [{ $in: ['$status', ['pendente', 'aceito', 'a_caminho', 'instalando']] }, 1, 0] } },
-                    canceladas: { $sum: { $cond: [{ $eq: ['$status', 'cancelado'] }, 1, 0] } },
+                    concluidas: { $sum: { $cond: [{ $in: ['$status', statusConcluido] }, 1, 0] } },
+                    emAndamento: { $sum: { $cond: [{ $in: ['$status', statusEmAndamento] }, 1, 0] } },
+                    canceladas: { $sum: { $cond: [{ $in: ['$status', statusCancelado] }, 1, 0] } },
                 },
             },
         ]);
@@ -46,9 +59,9 @@ let LojistasService = class LojistasService {
             {
                 $group: {
                     _id: null,
-                    concluidas: { $sum: { $cond: [{ $eq: ['$status', 'concluído'] }, 1, 0] } },
-                    emAndamento: { $sum: { $cond: [{ $in: ['$status', ['pendente', 'aceito', 'à_caminho', 'no_local']] }, 1, 0] } },
-                    canceladas: { $sum: { $cond: [{ $eq: ['$status', 'cancelado'] }, 1, 0] } },
+                    concluidas: { $sum: { $cond: [{ $in: ['$status', statusConcluido] }, 1, 0] } },
+                    emAndamento: { $sum: { $cond: [{ $in: ['$status', statusEmAndamento] }, 1, 0] } },
+                    canceladas: { $sum: { $cond: [{ $in: ['$status', statusCancelado] }, 1, 0] } },
                 },
             },
         ]);

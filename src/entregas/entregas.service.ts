@@ -13,9 +13,9 @@ import { Model, Types, Connection, ClientSession } from 'mongoose';
 import {
   Delivery,
   DeliveryDocument,
-  DeliveryStatus,
   Coordinates,
 } from './schemas/delivery.schema';
+import { DeliveryStatus } from './enums/delivery-status.enum';
 import {
   Entregador,
   EntregadorDocument,
@@ -497,7 +497,7 @@ export class EntregasService {
       ) {
         throw new BadRequestException('Código de confirmação inválido.');
       }
-      delivery.status = DeliveryStatus.INSTALANDO;
+      delivery.status = DeliveryStatus.EM_ATENDIMENTO;
       const deliverySavePromise = delivery.save({ session });
       const driverUpdatePromise = this.entregadorModel
         .updateOne(
@@ -542,13 +542,13 @@ export class EntregasService {
         );
       }
 
-      if (delivery.status !== DeliveryStatus.INSTALANDO) {
+      if (delivery.status !== DeliveryStatus.EM_ATENDIMENTO) {
         throw new ForbiddenException(
           'Apenas entregas "a caminho" podem ser finalizadas.',
         );
       }
 
-      delivery.status = DeliveryStatus.ENTREGUE;
+      delivery.status = DeliveryStatus.FINALIZADO;
       const savedDeliveryPromise = delivery.save({ session });
 
       const updateDriverPromise = this.entregadorModel
@@ -569,6 +569,89 @@ export class EntregasService {
       return savedDelivery;
     } catch (error) {
       await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  async cancelarEntrega(
+    deliveryId: string,
+    solicitanteId: string,
+  ): Promise<Delivery> {
+    const session = await this.connection.startSession();
+    session.startTransaction();
+    this.logger.log(`Iniciando transação para cancelar entrega ${deliveryId}`);
+
+    try {
+      const delivery = await this.deliveryModel
+        .findById(deliveryId)
+        .session(session)
+        .exec();
+
+      if (!delivery) {
+        throw new NotFoundException(
+          `Entrega com ID "${deliveryId}" não encontrada.`,
+        );
+      }
+
+      if (delivery.solicitanteId.toString() !== solicitanteId) {
+        throw new ForbiddenException(
+          'Você não tem permissão para cancelar esta entrega.',
+        );
+      }
+
+      const nonCancelableStatuses = [
+        DeliveryStatus.FINALIZADO,
+        DeliveryStatus.CANCELADO,
+      ];
+      if (nonCancelableStatuses.includes(delivery.status)) {
+        throw new BadRequestException(
+          'Esta entrega não pode mais ser cancelada.',
+        );
+      }
+
+      const driverId = delivery.driverId;
+      const driverEstaAtivo =
+        driverId &&
+        [
+          DeliveryStatus.ACEITO,
+          DeliveryStatus.A_CAMINHO,
+          DeliveryStatus.EM_ATENDIMENTO,
+        ].includes(delivery.status);
+
+      delivery.status = DeliveryStatus.CANCELADO;
+
+      const deliverySavePromise = delivery.save({ session });
+      const promises: any[] = [deliverySavePromise];
+
+      if (driverEstaAtivo) {
+        this.logger.log(
+          `Liberando entregador ${driverId} da entrega cancelada ${deliveryId}.`,
+        );
+        promises.push(
+          this.entregadorModel
+            .updateOne(
+              { _id: driverId },
+              { $set: { emEntrega: false } },
+              { session },
+            )
+            .exec(),
+        );
+      }
+      const [savedDelivery] = await Promise.all(promises);
+
+      await session.commitTransaction();
+      this.logger.log(`Transação de cancelamento para ${deliveryId} concluída.`);
+      this.entregadoresGateway.notifyDeliveryStatusChanged(savedDelivery);
+
+      return savedDelivery;
+    } catch (error) {
+      await session.abortTransaction();
+      this.logger.error(
+        `Erro na transação de cancelamento da entrega ${deliveryId}`,
+        (error as any)?.stack,
+      );
       throw error;
     } finally {
       session.endSession();

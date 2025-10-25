@@ -12,7 +12,6 @@ import {
   ValidationPipe,
   ParseFloatPipe,
   NotFoundException,
-  ForbiddenException,
   UseGuards,
   Req,
   UnauthorizedException,
@@ -25,10 +24,9 @@ import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { UpdateDeliveryDto } from './dto/update-delivery.dto';
 import {
   Delivery,
-  DeliveryStatus,
   Coordinates,
 } from './schemas/delivery.schema';
-import { FirebaseAuthGuard } from 'src/auth/firebase-auth/firebase-auth.guard';
+import { DeliveryStatus } from './enums/delivery-status.enum';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { FlexibleAuthGuard } from 'src/auth/flexible-auth.guard';
 import { RejeicaoDto } from './dto/rejeicao.dto';
@@ -227,6 +225,16 @@ export class EntregasController {
   async finishDelivery(@Param('id') id: string, @Req() request: Request) {
     const driver = request.user as any;
     return this.entregasService.finishDelivery(id, driver.sub);
+  }
+
+  @Patch(':id/cancelar')
+  @UseGuards(JwtAuthGuard)
+  async cancelarEntrega(
+    @Param('id') deliveryId: string,
+    @Req() request: { user: AuthenticatedUser },
+  ): Promise<Delivery> {
+    const lojistaId = request.user.sub
+    return this.entregasService.cancelarEntrega(deliveryId, lojistaId)
   }
 
   @Post()

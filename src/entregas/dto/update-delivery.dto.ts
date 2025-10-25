@@ -1,6 +1,6 @@
 import { IsString, IsNotEmpty, IsNumber, IsOptional, IsEnum, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
-import { DeliveryStatus } from "../schemas/delivery.schema";
+import { DeliveryStatus } from "../enums/delivery-status.enum";
 
 export class CoordinatesDto {
   @IsNumber()

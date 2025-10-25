@@ -1,5 +1,6 @@
 import { Model, Connection } from 'mongoose';
-import { Delivery, DeliveryDocument, DeliveryStatus, Coordinates } from './schemas/delivery.schema';
+import { Delivery, DeliveryDocument, Coordinates } from './schemas/delivery.schema';
+import { DeliveryStatus } from './enums/delivery-status.enum';
 import { EntregadorDocument } from '../entregadores/schemas/entregador.schema';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { UpdateDeliveryDto } from './dto/update-delivery.dto';
@@ -40,6 +41,7 @@ export declare class EntregasService {
     liberarCheckInManual(deliveryId: string, solicitanteId: string): Promise<Delivery>;
     realizarCheckIn(deliveryId: string, driverId: string, instalandoDto: InstalandoDto): Promise<Delivery>;
     finishDelivery(id: string, driverId: string): Promise<Delivery>;
+    cancelarEntrega(deliveryId: string, solicitanteId: string): Promise<Delivery>;
     handleStaleDeliveries(): Promise<void>;
     findAll(query: {
         page: number;

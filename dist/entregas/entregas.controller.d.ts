@@ -52,6 +52,9 @@ export declare class EntregasController {
         user: AuthenticatedUser;
     }, instalandoDto: InstalandoDto): Promise<Delivery>;
     finishDelivery(id: string, request: Request): Promise<Delivery>;
+    cancelarEntrega(deliveryId: string, request: {
+        user: AuthenticatedUser;
+    }): Promise<Delivery>;
     create(createDeliveryDto: CreateDeliveryDto, req: {
         user: AuthenticatedUser;
     }): Promise<Delivery>;
