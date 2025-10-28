@@ -1,5 +1,6 @@
 import { Model, Types } from 'mongoose';
 import { Entregador, EntregadorDocument } from './schemas/entregador.schema';
+import { EntregadoresGateway } from './entregadores.gateway';
 import { CreateEntregadorDto } from './dto/create-entregador.dto';
 import { UpdateEntregadorDto } from './dto/update-entregador.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
@@ -11,9 +12,10 @@ export declare class EntregadoresService {
     private readonly deliveryModel;
     private readonly socorroModel;
     private entregadorModel;
+    private entregadoresGateway;
     private readonly pontoHistoryService;
     private readonly logger;
-    constructor(deliveryModel: Model<Delivery>, socorroModel: Model<Socorro>, entregadorModel: Model<EntregadorDocument>, pontoHistoryService: PontoHistoryService);
+    constructor(deliveryModel: Model<Delivery>, socorroModel: Model<Socorro>, entregadorModel: Model<EntregadorDocument>, entregadoresGateway: EntregadoresGateway, pontoHistoryService: PontoHistoryService);
     updateHeartbeat(driverId: string): Promise<void>;
     markAsActive(driverId: string): Promise<void>;
     registerLogout(driverId: string): Promise<void>;

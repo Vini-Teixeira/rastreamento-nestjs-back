@@ -41,23 +41,33 @@ __decorate([
     __metadata("design:type", Number)
 ], Entregador.prototype, "recusasConsecutivas", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: Date, required: false, default: null }),
+    (0, mongoose_1.Prop)({ type: Date, default: null }),
     __metadata("design:type", Date)
 ], Entregador.prototype, "lastHeartbeat", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: String, required: false }),
+    (0, mongoose_1.Prop)({ type: String }),
     __metadata("design:type", String)
 ], Entregador.prototype, "horarioTrabalho", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'Lojista', required: false, default: null }),
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'Lojista', default: null }),
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], Entregador.prototype, "lojaBaseId", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: Object, required: false }),
+    (0, mongoose_1.Prop)({
+        type: {
+            type: String,
+            enum: ['Point'],
+            default: 'Point',
+        },
+        coordinates: {
+            type: [Number],
+            default: [0, 0],
+        },
+    }),
     __metadata("design:type", Object)
 ], Entregador.prototype, "localizacao", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: String, required: false, index: true }),
+    (0, mongoose_1.Prop)({ type: String, index: true }),
     __metadata("design:type", String)
 ], Entregador.prototype, "fcmToken", void 0);
 exports.Entregador = Entregador = __decorate([

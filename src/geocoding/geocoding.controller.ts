@@ -2,7 +2,7 @@ import { Controller, Get, Query, Logger, UseGuards } from '@nestjs/common';
 import { GoogleMapsService } from 'src/google-maps/google-maps.service';
 import { FlexibleAuthGuard } from 'src/auth/flexible-auth.guard';
 // import { FirebaseAuthGuard } from 'src/auth/firebase-auth/firebase-auth.guard';
-//import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+// import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
 @Controller('geocoding')
 @UseGuards(FlexibleAuthGuard) 

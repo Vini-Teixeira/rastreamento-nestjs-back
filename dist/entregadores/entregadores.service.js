@@ -18,6 +18,7 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const entregador_schema_1 = require("./schemas/entregador.schema");
+const entregadores_gateway_1 = require("./entregadores.gateway");
 const bcrypt = require("bcrypt");
 const delivery_schema_1 = require("../entregas/schemas/delivery.schema");
 const delivery_status_enum_1 = require("../entregas/enums/delivery-status.enum");
@@ -27,10 +28,11 @@ const ponto_history_schema_1 = require("../ponto-history/schemas/ponto-history.s
 const schedule_1 = require("@nestjs/schedule");
 const logger = new common_1.Logger('EntregadoresService');
 let EntregadoresService = EntregadoresService_1 = class EntregadoresService {
-    constructor(deliveryModel, socorroModel, entregadorModel, pontoHistoryService) {
+    constructor(deliveryModel, socorroModel, entregadorModel, entregadoresGateway, pontoHistoryService) {
         this.deliveryModel = deliveryModel;
         this.socorroModel = socorroModel;
         this.entregadorModel = entregadorModel;
+        this.entregadoresGateway = entregadoresGateway;
         this.pontoHistoryService = pontoHistoryService;
         this.logger = new common_1.Logger(EntregadoresService_1.name);
     }
@@ -50,13 +52,15 @@ let EntregadoresService = EntregadoresService_1 = class EntregadoresService {
     async markAsActive(driverId) {
         const driverObjectId = new mongoose_2.Types.ObjectId(driverId);
         await Promise.all([
-            this.entregadorModel.updateOne({ _id: driverObjectId }, {
+            this.entregadorModel
+                .updateOne({ _id: driverObjectId }, {
                 $set: {
                     ativo: true,
-                    lastHeartbeat: new Date()
-                }
-            }).exec(),
-            this.pontoHistoryService.registrarPonto(driverObjectId, ponto_history_schema_1.PontoAction.LOGIN)
+                    lastHeartbeat: new Date(),
+                },
+            })
+                .exec(),
+            this.pontoHistoryService.registrarPonto(driverObjectId, ponto_history_schema_1.PontoAction.LOGIN),
         ]);
         this.logger.log(`Entregador ${driverId} reativado via login e ponto registrado.`);
     }
@@ -132,13 +136,47 @@ let EntregadoresService = EntregadoresService_1 = class EntregadoresService {
             coordinates: [lng, lat],
         };
         const updatedDriver = await this.entregadorModel
-            .findByIdAndUpdate(driverId, { $set: { localizacao: geoJsonPoint } }, { new: true })
+            .findByIdAndUpdate(driverId, {
+            $set: { localizacao: geoJsonPoint },
+            $currentDate: { lastLocationUpdate: true },
+        }, { new: true })
             .exec();
         if (!updatedDriver) {
-            logger.warn(`Entregador não encontrado (id: ${driverId}) ao tentar atualizar localização.`);
+            logger.warn(`Entregador ${driverId} não encontrado ao atualizar localização.`);
             throw new common_1.NotFoundException(`Entregador com ID ${driverId} não encontrado.`);
         }
-        logger.log(`updateLocation -> sucesso para entregador ${driverId}`);
+        logger.log(`updateLocation -> Banco de dados atualizado (ou deveria ter sido) para ${driverId}`);
+        try {
+            const activeDeliveries = await this.deliveryModel
+                .find({
+                driverId: new mongoose_2.Types.ObjectId(driverId),
+                status: {
+                    $in: [
+                        delivery_status_enum_1.DeliveryStatus.ACEITO,
+                        delivery_status_enum_1.DeliveryStatus.A_CAMINHO,
+                        delivery_status_enum_1.DeliveryStatus.EM_ATENDIMENTO,
+                    ],
+                },
+            })
+                .select('_id')
+                .lean()
+                .exec();
+            if (activeDeliveries.length > 0) {
+                logger.log(`Notificando ${activeDeliveries.length} entrega(s) ativa(s) sobre nova localização do motorista ${driverId}`);
+                for (const delivery of activeDeliveries) {
+                    this.entregadoresGateway.emitDriverLocation(delivery._id.toString(), {
+                        driverId: driverId,
+                        location: geoJsonPoint,
+                    });
+                }
+            }
+            else {
+                logger.log(`Motorista ${driverId} atualizou localização, mas não está em nenhuma entrega ativa.`);
+            }
+        }
+        catch (err) {
+            logger.error(`Falha ao buscar entregas ativas ou emitir socket em updateLocation para ${driverId}`, err);
+        }
         return updatedDriver;
     }
     async findMyJobs(driverId) {
@@ -178,7 +216,9 @@ let EntregadoresService = EntregadoresService_1 = class EntregadoresService {
         return allJobs;
     }
     async updateFcmToken(driverId, fcmToken) {
-        await this.entregadorModel.updateOne({ _id: driverId }, { $set: { fcmToken: fcmToken } }).exec();
+        await this.entregadorModel
+            .updateOne({ _id: driverId }, { $set: { fcmToken: fcmToken } })
+            .exec();
         this.logger.log(`FCM token atualizado para o entregador ${driverId}.`);
     }
     async checkStaleHeartbeats() {
@@ -212,6 +252,7 @@ exports.EntregadoresService = EntregadoresService = EntregadoresService_1 = __de
     __metadata("design:paramtypes", [mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
+        entregadores_gateway_1.EntregadoresGateway,
         ponto_history_service_1.PontoHistoryService])
 ], EntregadoresService);
 //# sourceMappingURL=entregadores.service.js.map

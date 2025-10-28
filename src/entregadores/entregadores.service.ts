@@ -1,7 +1,14 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  forwardRef,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Entregador, EntregadorDocument } from './schemas/entregador.schema';
+import { EntregadoresGateway } from './entregadores.gateway';
 import { CreateEntregadorDto } from './dto/create-entregador.dto';
 import { UpdateEntregadorDto } from './dto/update-entregador.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
@@ -22,7 +29,9 @@ export class EntregadoresService {
   constructor(
     @InjectModel(Delivery.name) private readonly deliveryModel: Model<Delivery>,
     @InjectModel(Socorro.name) private readonly socorroModel: Model<Socorro>,
-    @InjectModel(Entregador.name) private entregadorModel: Model<EntregadorDocument>,
+    @InjectModel(Entregador.name)
+    private entregadorModel: Model<EntregadorDocument>,
+    private entregadoresGateway: EntregadoresGateway,
     private readonly pontoHistoryService: PontoHistoryService,
   ) {}
 
@@ -46,26 +55,38 @@ export class EntregadoresService {
   }
 
   async markAsActive(driverId: string): Promise<void> {
-    const driverObjectId = new Types.ObjectId(driverId)
+    const driverObjectId = new Types.ObjectId(driverId);
     await Promise.all([
-      this.entregadorModel.updateOne(
-        { _id: driverObjectId },
-        { 
-          $set: {
-            ativo: true,
-            lastHeartbeat: new Date()
-          }
-         }
-      ).exec(),
-      this.pontoHistoryService.registrarPonto(driverObjectId, PontoAction.LOGIN)
-    ])
-    this.logger.log(`Entregador ${driverId} reativado via login e ponto registrado.`)
+      this.entregadorModel
+        .updateOne(
+          { _id: driverObjectId },
+          {
+            $set: {
+              ativo: true,
+              lastHeartbeat: new Date(),
+            },
+          },
+        )
+        .exec(),
+      this.pontoHistoryService.registrarPonto(
+        driverObjectId,
+        PontoAction.LOGIN,
+      ),
+    ]);
+    this.logger.log(
+      `Entregador ${driverId} reativado via login e ponto registrado.`,
+    );
   }
 
   async registerLogout(driverId: string): Promise<void> {
-    const driverObjectId = new Types.ObjectId(driverId)
-    await this.pontoHistoryService.registrarPonto(driverObjectId, PontoAction.LOGOUT)
-    this.logger.log(`Ponto de Logout registrado para o entregador ${driverId}.`)
+    const driverObjectId = new Types.ObjectId(driverId);
+    await this.pontoHistoryService.registrarPonto(
+      driverObjectId,
+      PontoAction.LOGOUT,
+    );
+    this.logger.log(
+      `Ponto de Logout registrado para o entregador ${driverId}.`,
+    );
   }
 
   async validatePassword(
@@ -84,14 +105,14 @@ export class EntregadoresService {
   }
 
   async create(createEntregadorDto: CreateEntregadorDto): Promise<Entregador> {
-  const newEntregador = new this.entregadorModel({
-    ...createEntregadorDto, 
-    ativo: true, 
-  });
-  return newEntregador.save();
-}
+    const newEntregador = new this.entregadorModel({
+      ...createEntregadorDto,
+      ativo: true,
+    });
+    return newEntregador.save();
+  }
 
-async update(
+  async update(
     id: string,
     updateEntregadorDto: UpdateEntregadorDto,
   ): Promise<EntregadorDocument | null> {
@@ -149,7 +170,6 @@ async update(
     updateLocationDto: UpdateLocationDto,
   ): Promise<EntregadorDocument> {
     const { lat, lng } = updateLocationDto;
-
     logger.log(
       `updateLocation -> driverId: ${driverId} | lat:${lat} lng:${lng}`,
     );
@@ -162,31 +182,78 @@ async update(
     const updatedDriver = await this.entregadorModel
       .findByIdAndUpdate(
         driverId,
-        { $set: { localizacao: geoJsonPoint } },
+        {
+          $set: { localizacao: geoJsonPoint },
+          $currentDate: { lastLocationUpdate: true },
+        },
         { new: true },
       )
       .exec();
 
     if (!updatedDriver) {
       logger.warn(
-        `Entregador não encontrado (id: ${driverId}) ao tentar atualizar localização.`,
+        `Entregador ${driverId} não encontrado ao atualizar localização.`,
       );
       throw new NotFoundException(
         `Entregador com ID ${driverId} não encontrado.`,
       );
     }
 
-    logger.log(`updateLocation -> sucesso para entregador ${driverId}`);
+    logger.log(
+      `updateLocation -> Banco de dados atualizado (ou deveria ter sido) para ${driverId}`,
+    );
+
+    // --- 4. CHAMADA AO WEBSOCKET ADICIONADA ---
+    try {
+      const activeDeliveries: { _id: Types.ObjectId }[] =
+        await this.deliveryModel
+          .find({
+            driverId: new Types.ObjectId(driverId),
+            status: {
+              $in: [
+                DeliveryStatus.ACEITO,
+                DeliveryStatus.A_CAMINHO,
+                DeliveryStatus.EM_ATENDIMENTO,
+              ],
+            },
+          })
+          .select('_id')
+          .lean<{ _id: Types.ObjectId }[]>()
+          .exec();
+
+      if (activeDeliveries.length > 0) {
+        logger.log(
+          `Notificando ${activeDeliveries.length} entrega(s) ativa(s) sobre nova localização do motorista ${driverId}`,
+        );
+        for (const delivery of activeDeliveries) {
+          this.entregadoresGateway.emitDriverLocation(delivery._id.toString(), {
+            driverId: driverId,
+            location: geoJsonPoint,
+          });
+        }
+      } else {
+        logger.log(
+          `Motorista ${driverId} atualizou localização, mas não está em nenhuma entrega ativa.`,
+        );
+      }
+    } catch (err) {
+      logger.error(
+        `Falha ao buscar entregas ativas ou emitir socket em updateLocation para ${driverId}`,
+        err,
+      );
+    }
+    // --- FIM DA CHAMADA AO WEBSOCKET ---
+
     return updatedDriver;
   }
 
   async findMyJobs(driverId: string) {
     const activeStatuses = [
-    DeliveryStatus.PENDENTE,
-    DeliveryStatus.ACEITO,
-    DeliveryStatus.A_CAMINHO,
-    DeliveryStatus.EM_ATENDIMENTO,
-  ];
+      DeliveryStatus.PENDENTE,
+      DeliveryStatus.ACEITO,
+      DeliveryStatus.A_CAMINHO,
+      DeliveryStatus.EM_ATENDIMENTO,
+    ];
 
     const driverObjectId = new Types.ObjectId(driverId);
     const [deliveries, socorros] = await Promise.all([
@@ -224,11 +291,10 @@ async update(
   }
 
   async updateFcmToken(driverId: string, fcmToken: string): Promise<void> {
-    await this.entregadorModel.updateOne(
-      { _id: driverId },
-      { $set: { fcmToken: fcmToken } }
-    ).exec()
-    this.logger.log(`FCM token atualizado para o entregador ${driverId}.`)
+    await this.entregadorModel
+      .updateOne({ _id: driverId }, { $set: { fcmToken: fcmToken } })
+      .exec();
+    this.logger.log(`FCM token atualizado para o entregador ${driverId}.`);
   }
 
   @Cron(CronExpression.EVERY_MINUTE)

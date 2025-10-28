@@ -74,10 +74,6 @@ export class EntregadoresController {
     await this.entregadoresService.registerLogout(driverId)
   }
 
-  /**
-   * Atualizar localização do entregador logado
-   * Protegido com JWT
-   */
   @UseGuards(JwtAuthGuard)
   @Patch('me/location')
   @HttpCode(HttpStatus.OK)

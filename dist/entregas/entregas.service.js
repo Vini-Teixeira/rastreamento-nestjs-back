@@ -242,68 +242,107 @@ let EntregasService = EntregasService_1 = class EntregasService {
     async acceptDelivery(id, driverId) {
         const timeoutName = `delivery-timeout-${id}`;
         if (this.schedulerRegistry.doesExist('timeout', timeoutName)) {
-            this.schedulerRegistry.deleteTimeout(timeoutName);
-            this.logger.log(`Timeout para a entrega ${id} cancelado`);
+            try {
+                this.schedulerRegistry.deleteTimeout(timeoutName);
+                this.logger.log(`Timeout para a entrega ${id} cancelado`);
+            }
+            catch (e) {
+                this.logger.warn(`Falha ao deletar timeout ${timeoutName} em acceptDelivery. Pode já ter sido executado.`);
+            }
+        }
+        const [delivery, driver] = await Promise.all([
+            this.deliveryModel.findById(id).populate('driverId').exec(),
+            this.entregadorModel.findById(driverId).exec()
+        ]);
+        if (!delivery)
+            throw new common_1.NotFoundException(`Entrega com ID ${id} não encontrada.`);
+        if (!driver)
+            throw new common_1.NotFoundException(`Entregador com ID ${driverId} não encontrado.`);
+        const assignedDriverId = delivery.driverId
+            ? (delivery.driverId._id ?? delivery.driverId).toString()
+            : null;
+        if (assignedDriverId && assignedDriverId !== driverId) {
+            throw new common_1.ForbiddenException('Entrega atribuída a outro entregador.');
+        }
+        if (delivery.status !== delivery_status_enum_1.DeliveryStatus.PENDENTE) {
+            throw new common_1.BadRequestException('Entrega não está mais disponível para aceitar.');
         }
         const session = await this.connection.startSession();
         session.startTransaction();
+        let saved = null;
         try {
-            const delivery = await this.deliveryModel
-                .findById(id)
-                .session(session)
-                .exec();
-            if (!delivery)
-                throw new common_1.NotFoundException(`Entrega com ID ${id} não encontrada.`);
-            const assigned = delivery.driverId?._id?.toString() ??
-                delivery.driverId?.toString() ??
-                null;
-            if (assigned && assigned !== driverId) {
-                throw new common_1.ForbiddenException('Entrega atribuída a outro entregador.');
-            }
-            if (delivery.status !== delivery_status_enum_1.DeliveryStatus.PENDENTE) {
-                throw new common_1.BadRequestException('Entrega não está mais disponível para aceitar.');
-            }
             delivery.status = delivery_status_enum_1.DeliveryStatus.ACEITO;
-            delivery.driverId = new mongoose_2.Types.ObjectId(driverId);
+            delivery.driverId = driver._id;
+            if (driver.localizacao) {
+                delivery.driverCurrentLocation = driver.localizacao;
+                this.logger.log(`Definindo driverCurrentLocation inicial para entrega ${id} com base no entregador ${driverId}`);
+            }
+            else {
+                this.logger.warn(`Entregador ${driverId} sem localização registrada ao aceitar ${id}. driverCurrentLocation ficará nulo.`);
+                delivery.driverCurrentLocation = undefined;
+            }
             const savedDeliveryPromise = delivery.save({ session });
             const updateDriverPromise = this.entregadorModel
-                .updateOne({ _id: driverId }, { $set: { emEntrega: true }, recusasConsecutivas: 0 }, { session })
+                .updateOne({ _id: driverId }, { $set: { emEntrega: true, recusasConsecutivas: 0 } }, { session })
                 .exec();
-            const [saved] = await Promise.all([
+            [saved] = await Promise.all([
                 savedDeliveryPromise,
                 updateDriverPromise,
             ]);
             await session.commitTransaction();
+            this.logger.log(`Transação para aceitar entrega ${id} concluída.`);
+        }
+        catch (error) {
+            await session.abortTransaction();
+            this.logger.error(`Transação para aceitar ${id} FALHOU e foi revertida.`, error?.stack);
+            throw error;
+        }
+        finally {
+            session.endSession();
+        }
+        if (saved) {
             try {
                 this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
             }
             catch (err) {
                 this.logger.error('Falha ao emitir delivery_update após aceitar entrega.', err?.stack);
             }
-            return saved;
+            return saved.toObject();
         }
-        catch (error) {
-            await session.abortTransaction();
-            this.logger.error('Transação para aceitar não concluída.', error?.stack);
-            throw error;
-        }
-        finally {
-            session.endSession();
+        else {
+            this.logger.error(`Aceite da entrega ${id} concluído, mas objeto 'saved' nulo. Buscando novamente...`);
+            const finalDelivery = await this.findOne(id);
+            if (!finalDelivery)
+                throw new common_1.InternalServerErrorException('Falha ao buscar entrega após aceite.');
+            return finalDelivery;
         }
     }
     async collectItem(id, driverId) {
-        const delivery = await this.deliveryModel.findById(id).exec();
+        const [delivery, driver] = await Promise.all([
+            this.deliveryModel.findById(id).exec(),
+            this.entregadorModel.findById(driverId).exec()
+        ]);
         if (!delivery) {
             throw new common_1.NotFoundException('Entrega não encontrada.');
+        }
+        if (!driver) {
+            throw new common_1.NotFoundException(`Entregador com ID ${driverId} não encontrado.`);
         }
         const assigned = delivery.driverId?.toString() ?? null;
         if (!assigned || assigned !== driverId) {
             throw new common_1.UnauthorizedException('Você não tem permissão para modificar esta entrega.');
         }
         if (delivery.status !== delivery_status_enum_1.DeliveryStatus.ACEITO) {
-            throw new common_1.ForbiddenException('Apenas entregas com status "accepted" podem ser coletadas.');
+            throw new common_1.ForbiddenException('Apenas entregas com status ACEITO podem ser coletadas.');
         }
         delivery.status = delivery_status_enum_1.DeliveryStatus.A_CAMINHO;
+        if (driver.localizacao) {
+            delivery.driverCurrentLocation = driver.localizacao;
+            this.logger.log(`Atualizando driverCurrentLocation na coleta para entrega ${id}`);
+        }
+        else {
+            this.logger.warn(`Entregador ${driverId} sem localização registrada ao coletar item para ${id}. driverCurrentLocation não será atualizado.`);
+        }
         const saved = await delivery.save();
         this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
         return saved;
