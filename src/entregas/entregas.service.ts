@@ -7,7 +7,7 @@ import {
   forwardRef,
   ForbiddenException,
   UnauthorizedException,
-  InternalServerErrorException
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { Model, Types, Connection, ClientSession } from 'mongoose';
@@ -207,9 +207,11 @@ export class EntregasService {
     let codigoJaExiste = true;
     while (codigoJaExiste) {
       codigoUnico = gerarCodigoAleatorio(6);
-      const entregaExistente = await this.deliveryModel.findOne({
+      const entregaExistente = await this.deliveryModel
+        .findOne({
           codigoEntrega: codigoUnico,
-        }).exec();
+        })
+        .exec();
       if (!entregaExistente) {
         codigoJaExiste = false;
       }
@@ -343,31 +345,34 @@ export class EntregasService {
     }
   }
 
-
   async acceptDelivery(id: string, driverId: string): Promise<Delivery> {
     const timeoutName = `delivery-timeout-${id}`;
     if (this.schedulerRegistry.doesExist('timeout', timeoutName)) {
       try {
-          this.schedulerRegistry.deleteTimeout(timeoutName);
-          this.logger.log(`Timeout para a entrega ${id} cancelado`);
+        this.schedulerRegistry.deleteTimeout(timeoutName);
+        this.logger.log(`Timeout para a entrega ${id} cancelado`);
       } catch (e) {
-         this.logger.warn(`Falha ao deletar timeout ${timeoutName} em acceptDelivery. Pode já ter sido executado.`);
+        this.logger.warn(
+          `Falha ao deletar timeout ${timeoutName} em acceptDelivery. Pode já ter sido executado.`,
+        );
       }
     }
 
     const [delivery, driver] = await Promise.all([
-      this.deliveryModel.findById(id).populate('driverId').exec(), 
-      this.entregadorModel.findById(driverId).exec() 
+      this.deliveryModel.findById(id).populate('driverId').exec(),
+      this.entregadorModel.findById(driverId).exec(),
     ]);
 
     if (!delivery)
       throw new NotFoundException(`Entrega com ID ${id} não encontrada.`);
     if (!driver)
-      throw new NotFoundException(`Entregador com ID ${driverId} não encontrado.`);
+      throw new NotFoundException(
+        `Entregador com ID ${driverId} não encontrado.`,
+      );
 
-    const assignedDriverId = delivery.driverId 
-        ? ((delivery.driverId as any)._id ?? delivery.driverId).toString()
-        : null;
+    const assignedDriverId = delivery.driverId
+      ? ((delivery.driverId as any)._id ?? delivery.driverId).toString()
+      : null;
 
     if (assignedDriverId && assignedDriverId !== driverId) {
       throw new ForbiddenException('Entrega atribuída a outro entregador.');
@@ -387,11 +392,15 @@ export class EntregasService {
       delivery.status = DeliveryStatus.ACEITO;
       delivery.driverId = driver._id as any;
       if (driver.localizacao) {
-          delivery.driverCurrentLocation = driver.localizacao;
-          this.logger.log(`Definindo driverCurrentLocation inicial para entrega ${id} com base no entregador ${driverId}`);
+        delivery.driverCurrentLocation = driver.localizacao;
+        this.logger.log(
+          `Definindo driverCurrentLocation inicial para entrega ${id} com base no entregador ${driverId}`,
+        );
       } else {
-          this.logger.warn(`Entregador ${driverId} sem localização registrada ao aceitar ${id}. driverCurrentLocation ficará nulo.`);
-          delivery.driverCurrentLocation = undefined;
+        this.logger.warn(
+          `Entregador ${driverId} sem localização registrada ao aceitar ${id}. driverCurrentLocation ficará nulo.`,
+        );
+        delivery.driverCurrentLocation = undefined;
       }
       const savedDeliveryPromise = delivery.save({ session });
       const updateDriverPromise = this.entregadorModel
@@ -401,14 +410,10 @@ export class EntregasService {
           { session },
         )
         .exec();
-      [saved] = await Promise.all([
-        savedDeliveryPromise,
-        updateDriverPromise,
-      ]);
+      [saved] = await Promise.all([savedDeliveryPromise, updateDriverPromise]);
 
       await session.commitTransaction();
       this.logger.log(`Transação para aceitar entrega ${id} concluída.`);
-
     } catch (error) {
       await session.abortTransaction();
       this.logger.error(
@@ -419,36 +424,43 @@ export class EntregasService {
     } finally {
       session.endSession();
     }
-    if (saved) { 
-        try {
-            this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
-        } catch (err) {
-            this.logger.error(
-            'Falha ao emitir delivery_update após aceitar entrega.',
-            (err as any)?.stack,
-            );
-        }
-        return saved.toObject();
+    if (saved) {
+      try {
+        this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
+      } catch (err) {
+        this.logger.error(
+          'Falha ao emitir delivery_update após aceitar entrega.',
+          (err as any)?.stack,
+        );
+      }
+      return saved.toObject();
     } else {
-         this.logger.error(`Aceite da entrega ${id} concluído, mas objeto 'saved' nulo. Buscando novamente...`);
-         const finalDelivery = await this.findOne(id);
-         if (!finalDelivery) throw new InternalServerErrorException('Falha ao buscar entrega após aceite.');
-         return finalDelivery;
+      this.logger.error(
+        `Aceite da entrega ${id} concluído, mas objeto 'saved' nulo. Buscando novamente...`,
+      );
+      const finalDelivery = await this.findOne(id);
+      if (!finalDelivery)
+        throw new InternalServerErrorException(
+          'Falha ao buscar entrega após aceite.',
+        );
+      return finalDelivery;
     }
   }
 
   async collectItem(id: string, driverId: string): Promise<Delivery> {
-     const [delivery, driver] = await Promise.all([
-         this.deliveryModel.findById(id).exec(),
-         this.entregadorModel.findById(driverId).exec()
-      ]);
+    const [delivery, driver] = await Promise.all([
+      this.deliveryModel.findById(id).exec(),
+      this.entregadorModel.findById(driverId).exec(),
+    ]);
 
     // --- Validações ---
     if (!delivery) {
       throw new NotFoundException('Entrega não encontrada.');
     }
-     if (!driver) {
-      throw new NotFoundException(`Entregador com ID ${driverId} não encontrado.`);
+    if (!driver) {
+      throw new NotFoundException(
+        `Entregador com ID ${driverId} não encontrado.`,
+      );
     }
 
     const assigned = (delivery.driverId as any)?.toString() ?? null;
@@ -465,12 +477,16 @@ export class EntregasService {
 
     // --- Atualizações ---
     delivery.status = DeliveryStatus.A_CAMINHO;
-     if (driver.localizacao) {
-        delivery.driverCurrentLocation = driver.localizacao;
-        this.logger.log(`Atualizando driverCurrentLocation na coleta para entrega ${id}`);
-     } else {
-        this.logger.warn(`Entregador ${driverId} sem localização registrada ao coletar item para ${id}. driverCurrentLocation não será atualizado.`);
-     }
+    if (driver.localizacao) {
+      delivery.driverCurrentLocation = driver.localizacao;
+      this.logger.log(
+        `Atualizando driverCurrentLocation na coleta para entrega ${id}`,
+      );
+    } else {
+      this.logger.warn(
+        `Entregador ${driverId} sem localização registrada ao coletar item para ${id}. driverCurrentLocation não será atualizado.`,
+      );
+    }
     const saved = await delivery.save();
     this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
     return saved;
@@ -494,10 +510,7 @@ export class EntregasService {
       );
     }
 
-    const statusPermitidos = [
-      DeliveryStatus.ACEITO,
-      DeliveryStatus.A_CAMINHO,
-    ];
+    const statusPermitidos = [DeliveryStatus.ACEITO, DeliveryStatus.A_CAMINHO];
     if (!statusPermitidos.includes(delivery.status)) {
       throw new BadRequestException(
         `Não é possível liberar o CheckIn para uma entrega com status "${delivery.status}".`,
@@ -676,7 +689,9 @@ export class EntregasService {
       const [savedDelivery] = await Promise.all(promises);
 
       await session.commitTransaction();
-      this.logger.log(`Transação de cancelamento para ${deliveryId} concluída.`);
+      this.logger.log(
+        `Transação de cancelamento para ${deliveryId} concluída.`,
+      );
       this.entregadoresGateway.notifyDeliveryStatusChanged(savedDelivery);
 
       return savedDelivery;
@@ -941,31 +956,43 @@ export class EntregasService {
         `Entrega com ID "${deliveryId}" não encontrada para atualizar localização do entregador.`,
       );
     }
-
     const now = new Date();
     const geoPoint = toGeoJSONWithTimestamp(lat, lng, now);
-
     (delivery as any).driverCurrentLocation = geoPoint as any;
+    if (!Array.isArray(delivery.routeHistory)) {
+      delivery.routeHistory = [];
+    }
+    delivery.routeHistory.push(geoPoint as any);
+
+    const payload = {
+      deliveryId,
+      driverId: delivery.driverId ? String(delivery.driverId) : null,
+      location: {
+        type: geoPoint.type,
+        coordinates: geoPoint.coordinates,
+        timestamp: now.toISOString(),
+      },
+      routeHistory: delivery.routeHistory.map((point) => ({
+        type: point.type,
+        coordinates: point.coordinates,
+        timestamp: point.timestamp,
+      })),
+    };
     const updatedDelivery = await delivery.save();
 
     try {
-      this.entregadoresGateway.emitDriverLocation(deliveryId, {
-        driverId: updatedDelivery.driverId
-          ? String(updatedDelivery.driverId)
-          : null,
-        location: {
-          type: geoPoint.type,
-          coordinates: geoPoint.coordinates,
-          timestamp: now.toISOString(),
-        },
-      });
+      // --- LOG DE DEBUG ---
+      this.logger.log(
+        `[WS] Emitindo 'novaLocalizacao' para ${deliveryId}. Histórico com ${payload.routeHistory.length} pontos.`,
+      );
+      // --- FIM DO LOG ---
+      this.entregadoresGateway.emitDriverLocation(deliveryId, payload);
     } catch (err) {
       this.logger.error(
         'Falha ao emitir novaLocalizacao via WebSocket',
         (err as any)?.stack,
       );
     }
-
     return updatedDelivery;
   }
 

@@ -138,9 +138,11 @@ let EntregasService = EntregasService_1 = class EntregasService {
         let codigoJaExiste = true;
         while (codigoJaExiste) {
             codigoUnico = gerarCodigoAleatorio(6);
-            const entregaExistente = await this.deliveryModel.findOne({
+            const entregaExistente = await this.deliveryModel
+                .findOne({
                 codigoEntrega: codigoUnico,
-            }).exec();
+            })
+                .exec();
             if (!entregaExistente) {
                 codigoJaExiste = false;
             }
@@ -252,7 +254,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
         }
         const [delivery, driver] = await Promise.all([
             this.deliveryModel.findById(id).populate('driverId').exec(),
-            this.entregadorModel.findById(driverId).exec()
+            this.entregadorModel.findById(driverId).exec(),
         ]);
         if (!delivery)
             throw new common_1.NotFoundException(`Entrega com ID ${id} não encontrada.`);
@@ -285,10 +287,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
             const updateDriverPromise = this.entregadorModel
                 .updateOne({ _id: driverId }, { $set: { emEntrega: true, recusasConsecutivas: 0 } }, { session })
                 .exec();
-            [saved] = await Promise.all([
-                savedDeliveryPromise,
-                updateDriverPromise,
-            ]);
+            [saved] = await Promise.all([savedDeliveryPromise, updateDriverPromise]);
             await session.commitTransaction();
             this.logger.log(`Transação para aceitar entrega ${id} concluída.`);
         }
@@ -320,7 +319,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
     async collectItem(id, driverId) {
         const [delivery, driver] = await Promise.all([
             this.deliveryModel.findById(id).exec(),
-            this.entregadorModel.findById(driverId).exec()
+            this.entregadorModel.findById(driverId).exec(),
         ]);
         if (!delivery) {
             throw new common_1.NotFoundException('Entrega não encontrada.');
@@ -355,10 +354,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
         if (delivery.solicitanteId.toString() !== solicitanteId) {
             throw new common_1.ForbiddenException('Você não tem permissão para modificar esta entrega');
         }
-        const statusPermitidos = [
-            delivery_status_enum_1.DeliveryStatus.ACEITO,
-            delivery_status_enum_1.DeliveryStatus.A_CAMINHO,
-        ];
+        const statusPermitidos = [delivery_status_enum_1.DeliveryStatus.ACEITO, delivery_status_enum_1.DeliveryStatus.A_CAMINHO];
         if (!statusPermitidos.includes(delivery.status)) {
             throw new common_1.BadRequestException(`Não é possível liberar o CheckIn para uma entrega com status "${delivery.status}".`);
         }
@@ -662,18 +658,28 @@ let EntregasService = EntregasService_1 = class EntregasService {
         const now = new Date();
         const geoPoint = toGeoJSONWithTimestamp(lat, lng, now);
         delivery.driverCurrentLocation = geoPoint;
+        if (!Array.isArray(delivery.routeHistory)) {
+            delivery.routeHistory = [];
+        }
+        delivery.routeHistory.push(geoPoint);
+        const payload = {
+            deliveryId,
+            driverId: delivery.driverId ? String(delivery.driverId) : null,
+            location: {
+                type: geoPoint.type,
+                coordinates: geoPoint.coordinates,
+                timestamp: now.toISOString(),
+            },
+            routeHistory: delivery.routeHistory.map((point) => ({
+                type: point.type,
+                coordinates: point.coordinates,
+                timestamp: point.timestamp,
+            })),
+        };
         const updatedDelivery = await delivery.save();
         try {
-            this.entregadoresGateway.emitDriverLocation(deliveryId, {
-                driverId: updatedDelivery.driverId
-                    ? String(updatedDelivery.driverId)
-                    : null,
-                location: {
-                    type: geoPoint.type,
-                    coordinates: geoPoint.coordinates,
-                    timestamp: now.toISOString(),
-                },
-            });
+            this.logger.log(`[WS] Emitindo 'novaLocalizacao' para ${deliveryId}. Histórico com ${payload.routeHistory.length} pontos.`);
+            this.entregadoresGateway.emitDriverLocation(deliveryId, payload);
         }
         catch (err) {
             this.logger.error('Falha ao emitir novaLocalizacao via WebSocket', err?.stack);

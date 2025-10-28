@@ -180,18 +180,23 @@ export class EntregadoresGateway implements OnGatewayConnection, OnGatewayDiscon
   }
 }
 
-  emitDriverLocation(deliveryId: string, payload: { driverId: string | null; location: any }): void {
-    try {
-      this.server.to(deliveryId).emit('novaLocalizacao', {
-        deliveryId,
-        driverId: payload.driverId,
-        location: payload.location,
-      });
-      this.logger.log(`WS: novaLocalizacao emitida para sala da entrega ${deliveryId}`);
-    } catch (err) {
-      this.logger.error(`Erro ao emitir novaLocalizacao para entrega ${deliveryId}`, err as any);
-    }
+  emitDriverLocation(deliveryId: string, payload: any): void {
+  try {
+    this.server.to(deliveryId).emit('novaLocalizacao', {
+      deliveryId,
+      ...payload,
+    });
+    this.logger.log(
+      `WS: novaLocalizacao emitida para sala da entrega ${deliveryId} (payload completo: ${Object.keys(payload).join(', ')})`
+    );
+  } catch (err) {
+    this.logger.error(
+      `Erro ao emitir novaLocalizacao para entrega ${deliveryId}`,
+      err as any
+    );
   }
+}
+
 
   @SubscribeMessage('atualizarLocalizacao')
   async handleLocationUpdate(

@@ -137,10 +137,9 @@ let EntregadoresGateway = EntregadoresGateway_1 = class EntregadoresGateway {
         try {
             this.server.to(deliveryId).emit('novaLocalizacao', {
                 deliveryId,
-                driverId: payload.driverId,
-                location: payload.location,
+                ...payload,
             });
-            this.logger.log(`WS: novaLocalizacao emitida para sala da entrega ${deliveryId}`);
+            this.logger.log(`WS: novaLocalizacao emitida para sala da entrega ${deliveryId} (payload completo: ${Object.keys(payload).join(', ')})`);
         }
         catch (err) {
             this.logger.error(`Erro ao emitir novaLocalizacao para entrega ${deliveryId}`, err);

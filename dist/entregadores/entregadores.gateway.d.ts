@@ -31,10 +31,7 @@ export declare class EntregadoresGateway implements OnGatewayConnection, OnGatew
     }): void;
     notifyNewDelivery(driverId: string, delivery: any): void;
     notifyDeliveryStatusChanged(delivery: any): void;
-    emitDriverLocation(deliveryId: string, payload: {
-        driverId: string | null;
-        location: any;
-    }): void;
+    emitDriverLocation(deliveryId: string, payload: any): void;
     handleLocationUpdate(data: {
         deliveryId: string;
         lat: number;
