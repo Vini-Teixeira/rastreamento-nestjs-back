@@ -477,17 +477,35 @@ export class EntregasService {
 
     // --- Atualizações ---
     delivery.status = DeliveryStatus.A_CAMINHO;
+
     if (driver.localizacao) {
       delivery.driverCurrentLocation = driver.localizacao;
       this.logger.log(
         `Atualizando driverCurrentLocation na coleta para entrega ${id}`,
+      );
+
+      const now = new Date();
+      const currentGeoPoint = {
+        type: 'Point',
+        coordinates: [
+          driver.localizacao.coordinates[0],
+          driver.localizacao.coordinates[1],
+        ],
+        timestamp: now,
+      };
+
+      delivery.routeHistory = [currentGeoPoint];
+      this.logger.log(
+        `[EntregasService] Histórico reiniciado ao coletar item da entrega ${id}. Novo ponto inicial: ${currentGeoPoint.coordinates}`,
       );
     } else {
       this.logger.warn(
         `Entregador ${driverId} sem localização registrada ao coletar item para ${id}. driverCurrentLocation não será atualizado.`,
       );
     }
+
     const saved = await delivery.save();
+
     this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
     return saved;
   }
