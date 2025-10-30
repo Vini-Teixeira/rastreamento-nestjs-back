@@ -47,6 +47,7 @@ let AuthService = class AuthService {
         const payload = {
             sub: String(lojista._id),
             email: String(lojista.email),
+            nome: String(lojista.nomeFantasia),
             role: lojista.role
         };
         return {

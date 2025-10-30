@@ -6,6 +6,7 @@ import {
   IsMongoId,
   ValidateNested,
   IsOptional,
+  IsBoolean
 } from 'class-validator';
 
 class CoordinatesDto {
@@ -59,4 +60,8 @@ export class CreateDeliveryDto {
   @IsMongoId()
   @IsOptional()
   origemId?: string
+
+  @IsOptional()
+  @IsBoolean()
+  recolherSucata?: boolean
 }

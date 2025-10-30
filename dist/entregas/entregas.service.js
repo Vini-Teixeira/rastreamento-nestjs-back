@@ -114,7 +114,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
         }
     }
     async create(createDeliveryDto, solicitanteId) {
-        const { destination, itemDescription, origemId } = createDeliveryDto;
+        const { destination, itemDescription, origemId, recolherSucata } = createDeliveryDto;
         const idDaLojaDeOrigem = origemId || solicitanteId;
         const lojaDeOrigem = await this.lojistaModel
             .findById(idDaLojaDeOrigem)
@@ -163,6 +163,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
             },
             driverId: nearestDriverInfo._id,
             codigoEntrega: codigoUnico,
+            recolherSucata: recolherSucata || false
         });
         const saved = await newDelivery.save();
         try {

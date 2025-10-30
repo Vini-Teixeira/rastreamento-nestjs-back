@@ -15,5 +15,6 @@ export declare class CreateDeliveryDto {
     destination: DestinationLocationDto;
     itemDescription: string;
     origemId?: string;
+    recolherSucata?: boolean;
 }
 export {};

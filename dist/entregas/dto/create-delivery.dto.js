@@ -75,4 +75,9 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreateDeliveryDto.prototype, "origemId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateDeliveryDto.prototype, "recolherSucata", void 0);
 //# sourceMappingURL=create-delivery.dto.js.map

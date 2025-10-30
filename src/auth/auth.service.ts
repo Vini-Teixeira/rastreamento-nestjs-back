@@ -16,6 +16,7 @@ interface DriverPayload {
 interface LojistaPayload {
   sub: string;
   email: string;
+  nome: string;
   role: string
 }
 
@@ -54,6 +55,7 @@ export class AuthService {
     const payload: LojistaPayload = {
       sub: String(lojista._id),
       email: String(lojista.email),
+      nome: String(lojista.nomeFantasia),
       role: lojista.role
     };
 

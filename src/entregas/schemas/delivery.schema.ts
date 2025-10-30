@@ -107,6 +107,9 @@ export class Delivery extends MongooseDocument {
   @Prop({ type: [RejeicaoDto], default: [] })
   historicoRejeicoes: RejeicaoInfo[];
 
+  @Prop({ type: Boolean, default: false })
+  recolherSucata: boolean;
+
   @Prop()
   createdAt?: Date;
 

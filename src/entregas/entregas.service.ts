@@ -169,8 +169,7 @@ export class EntregasService {
     createDeliveryDto: CreateDeliveryDto,
     solicitanteId: string,
   ): Promise<Delivery> {
-    const { destination, itemDescription, origemId } = createDeliveryDto;
-
+    const { destination, itemDescription, origemId, recolherSucata } = createDeliveryDto;
     const idDaLojaDeOrigem = origemId || solicitanteId;
     const lojaDeOrigem = await this.lojistaModel
       .findById(idDaLojaDeOrigem)
@@ -180,7 +179,6 @@ export class EntregasService {
         `Loja de origem com ID ${idDaLojaDeOrigem} não encontrada.`,
       );
     }
-
     const nearestDriverInfo = await this.findNearestDriverInfo(
       lojaDeOrigem.coordinates as any,
     );
@@ -232,6 +230,7 @@ export class EntregasService {
       },
       driverId: nearestDriverInfo._id,
       codigoEntrega: codigoUnico,
+      recolherSucata: recolherSucata || false
     });
 
     const saved = await newDelivery.save();

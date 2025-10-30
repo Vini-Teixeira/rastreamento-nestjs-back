@@ -55,6 +55,7 @@ export declare class Delivery extends MongooseDocument {
     codigoEntrega: string;
     checkInLiberadoManualmente: boolean;
     historicoRejeicoes: RejeicaoInfo[];
+    recolherSucata: boolean;
     createdAt?: Date;
     updateAt?: Date;
 }
