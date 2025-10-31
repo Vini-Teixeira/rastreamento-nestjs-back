@@ -1,19 +1,66 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
-import { Document } from 'mongoose'
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument, Types } from 'mongoose';
+import * as bcrypt from 'bcrypt';
 
-@Schema()
-export class Entregador extends Document {
-    @Prop({ required: true})
-    nome: string
+@Schema({ timestamps: true, collection: 'entregadores' })
+export class Entregador {
+  @Prop({ required: true })
+  nome: string;
 
-    @Prop({ required: true })
-    telefone: string
+  @Prop({ required: true, unique: true })
+  telefone: string;
 
-    @Prop({ required: true })
-    ativo: boolean
+  @Prop({ required: true })
+  ativo: boolean;
 
-    @Prop({ type: { lat: Number, lng: Number }, required: true })
-    localizacao: { lat: number; lng: number };
+  @Prop({ required: true, select: false })
+  password: string;
+
+  @Prop({ default: false })
+  emEntrega: boolean;
+
+  @Prop({ type: Number, required: true, default: 0 })
+  recusasConsecutivas: number;
+
+  @Prop({ type: Date, default: null })
+  lastHeartbeat?: Date;
+
+  @Prop({ type: String })
+  horarioTrabalho?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Lojista', default: null })
+  lojaBaseId?: Types.ObjectId;
+
+  @Prop({
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point',
+    },
+    coordinates: {
+      type: [Number],
+      default: [0, 0],
+    },
+  })
+  localizacao?: {
+    type: 'Point';
+    coordinates: number[];
+  };
+
+  @Prop({ type: String, index: true })
+  fcmToken?: string;
 }
 
-export const EntregadorSchema = SchemaFactory.createForClass(Entregador)
+export type EntregadorDocument = HydratedDocument<Entregador>;
+
+export const EntregadorSchema = SchemaFactory.createForClass(Entregador).index({
+  localizacao: '2dsphere',
+});
+
+EntregadorSchema.pre<EntregadorDocument>('save', async function (next) {
+  if (!this.isModified('password')) {
+    return next();
+  }
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
