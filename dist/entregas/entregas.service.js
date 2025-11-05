@@ -128,11 +128,28 @@ let EntregasService = EntregasService_1 = class EntregasService {
         }
         this.logger.log(`Entregador mais próximo: ${nearestDriverInfo.nome} a ${nearestDriverInfo.distanciaCalculada.toFixed(0)} metros.`);
         let destinationGeo;
-        try {
-            destinationGeo = await this.googleMapsService.geocodeAddress(destination.address);
+        if (destination.coordinates) {
+            this.logger.log('Coordenadas recebidas do frontend (autocomplete). Pulando geocoding.');
+            destinationGeo = {
+                type: 'Point',
+                coordinates: [
+                    destination.coordinates.lng,
+                    destination.coordinates.lat,
+                ],
+            };
         }
-        catch (error) {
-            throw new common_1.BadRequestException('O endereço de destino não pôde ser encontrado.');
+        else {
+            this.logger.warn('Coordenadas NÃO recebidas. Acionando geocoding manual (fallback)...');
+            try {
+                destinationGeo = await this.googleMapsService.geocodeAddress(destination.address);
+                if (!destinationGeo || (destinationGeo.coordinates[0] === 0 && destinationGeo.coordinates[1] === 0)) {
+                    throw new Error('Geocoding manual retornou coordenadas inválidas.');
+                }
+            }
+            catch (error) {
+                this.logger.error(`Falha no geocoding manual: ${error.message}`);
+                throw new common_1.BadRequestException('O endereço de destino (manual) não pôde ser encontrado ou é inválido.');
+            }
         }
         let codigoUnico = '';
         let codigoJaExiste = true;
@@ -163,7 +180,10 @@ let EntregasService = EntregasService_1 = class EntregasService {
             },
             driverId: nearestDriverInfo._id,
             codigoEntrega: codigoUnico,
-            recolherSucata: recolherSucata || false
+            recolherSucata: recolherSucata || false,
+            tipoEntrega: createDeliveryDto.tipoEntrega,
+            tipoDocumento: createDeliveryDto.tipoDocumento,
+            numeroDocumento: createDeliveryDto.numeroDocumento,
         });
         const saved = await newDelivery.save();
         try {
@@ -272,50 +292,36 @@ let EntregasService = EntregasService_1 = class EntregasService {
         }
         const session = await this.connection.startSession();
         session.startTransaction();
-        let saved = null;
         try {
             delivery.status = delivery_status_enum_1.DeliveryStatus.ACEITO;
             delivery.driverId = driver._id;
-            if (driver.localizacao) {
-                delivery.driverCurrentLocation = driver.localizacao;
-                this.logger.log(`Definindo driverCurrentLocation inicial para entrega ${id} com base no entregador ${driverId}`);
-            }
-            else {
-                this.logger.warn(`Entregador ${driverId} sem localização registrada ao aceitar ${id}. driverCurrentLocation ficará nulo.`);
-                delivery.driverCurrentLocation = undefined;
-            }
-            const savedDeliveryPromise = delivery.save({ session });
-            const updateDriverPromise = this.entregadorModel
+            delivery.driverCurrentLocation = driver.localizacao ?? undefined;
+            await delivery.save({ session });
+            await this.entregadorModel
                 .updateOne({ _id: driverId }, { $set: { emEntrega: true, recusasConsecutivas: 0 } }, { session })
                 .exec();
-            [saved] = await Promise.all([savedDeliveryPromise, updateDriverPromise]);
             await session.commitTransaction();
-            this.logger.log(`Transação para aceitar entrega ${id} concluída.`);
+            this.logger.log(`✅ Transação para aceitar entrega ${id} concluída.`);
         }
         catch (error) {
             await session.abortTransaction();
-            this.logger.error(`Transação para aceitar ${id} FALHOU e foi revertida.`, error?.stack);
+            this.logger.error(`❌ Transação para aceitar ${id} FALHOU e foi revertida.`, error?.stack);
             throw error;
         }
         finally {
             session.endSession();
         }
-        if (saved) {
+        const savedDelivery = await this.deliveryModel.findById(id).exec();
+        if (savedDelivery) {
             try {
-                this.entregadoresGateway.notifyDeliveryStatusChanged(saved);
+                this.entregadoresGateway.notifyDeliveryStatusChanged(savedDelivery);
             }
             catch (err) {
                 this.logger.error('Falha ao emitir delivery_update após aceitar entrega.', err?.stack);
             }
-            return saved.toObject();
+            return savedDelivery.toObject();
         }
-        else {
-            this.logger.error(`Aceite da entrega ${id} concluído, mas objeto 'saved' nulo. Buscando novamente...`);
-            const finalDelivery = await this.findOne(id);
-            if (!finalDelivery)
-                throw new common_1.InternalServerErrorException('Falha ao buscar entrega após aceite.');
-            return finalDelivery;
-        }
+        throw new common_1.InternalServerErrorException('Falha ao buscar entrega após aceite.');
     }
     async collectItem(id, driverId) {
         const [delivery, driver] = await Promise.all([

@@ -9,6 +9,7 @@ export declare class AuthService {
     constructor(jwtService: JwtService, firebase: admin.app.App, adminModel: Model<AdminDocument>);
     loginDriver(driver: any): Promise<{
         access_token: string;
+        firebase_token: string;
     }>;
     loginLojista(lojista: any): Promise<{
         access_token: string;

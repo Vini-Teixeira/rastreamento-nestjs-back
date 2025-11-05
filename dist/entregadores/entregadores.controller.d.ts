@@ -17,6 +17,7 @@ export declare class EntregadoresController {
     }): Promise<void>;
     login(driverLoginDto: DriverLoginDto): Promise<{
         access_token: string;
+        firebase_token: string;
     }>;
     logout(request: {
         user: AuthenticatedUser;

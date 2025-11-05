@@ -8,6 +8,7 @@ declare class OriginLocationDto {
 }
 declare class DestinationLocationDto {
     address: string;
+    coordinates?: CoordinatesDto;
 }
 export declare class CreateDeliveryDto {
     origin?: OriginLocationDto;
@@ -16,5 +17,8 @@ export declare class CreateDeliveryDto {
     itemDescription: string;
     origemId?: string;
     recolherSucata?: boolean;
+    tipoEntrega?: 'propria' | 'parceira';
+    tipoDocumento?: 'NF' | 'CUPOM FISCAL';
+    numeroDocumento?: string;
 }
 export {};

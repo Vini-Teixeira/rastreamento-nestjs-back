@@ -19,10 +19,9 @@ let GoogleMapsService = GoogleMapsService_1 = class GoogleMapsService {
         this.configService = configService;
         this.logger = new common_1.Logger(GoogleMapsService_1.name);
         this.client = new google_maps_services_js_1.Client({});
-        const key = this.configService.get('GOOGLE_MAPS_API_KEY') ||
-            this.configService.get('Maps_API_KEY');
+        const key = this.configService.get('GOOGLE_MAPS_BACKEND_API_KEY');
         if (!key) {
-            throw new common_1.InternalServerErrorException('Variável de ambiente GOOGLE_MAPS_API_KEY/Maps_API_KEY não configurada.');
+            throw new common_1.InternalServerErrorException('Variável de ambiente GOOGLE_MAPS_BACKEND_API_KEY não configurada.');
         }
         this.apiKey = key;
     }

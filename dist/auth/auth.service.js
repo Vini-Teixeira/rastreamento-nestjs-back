@@ -36,8 +36,22 @@ let AuthService = class AuthService {
             telefone: String(driver.telefone),
             role: driver.role,
         };
+        const accessToken = this.jwtService.sign(payload);
+        let firebaseToken;
+        try {
+            const uid = String(driver._id);
+            const customClaims = {
+                role: driver.role,
+            };
+            firebaseToken = await this.firebase.auth().createCustomToken(uid, customClaims);
+        }
+        catch (error) {
+            console.error('FIREBASE_AUTH_ERROR: Falha ao criar custom token', error);
+            throw new common_1.BadRequestException('Falha ao gerar token de autenticação secundária (Firebase).');
+        }
         return {
-            access_token: this.jwtService.sign(payload),
+            access_token: accessToken,
+            firebase_token: firebaseToken,
         };
     }
     async loginLojista(lojista) {

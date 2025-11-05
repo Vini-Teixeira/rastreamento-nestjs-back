@@ -32,9 +32,14 @@ class OriginLocationDto {
 
 
 class DestinationLocationDto {
-    @IsString()
-    @IsNotEmpty()
-    address: string;
+  @IsString()
+  @IsNotEmpty()
+  address: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CoordinatesDto)
+  coordinates?: CoordinatesDto;
 }
 
 export class CreateDeliveryDto {
@@ -64,4 +69,16 @@ export class CreateDeliveryDto {
   @IsOptional()
   @IsBoolean()
   recolherSucata?: boolean
+
+  @IsOptional()
+  @IsString()
+  tipoEntrega?: 'propria' | 'parceira';
+
+  @IsOptional()
+  @IsString()
+  tipoDocumento?: 'NF' | 'CUPOM FISCAL';
+
+  @IsOptional()
+  @IsString()
+  numeroDocumento?: string;
 }

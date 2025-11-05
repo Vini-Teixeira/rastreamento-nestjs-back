@@ -16,14 +16,10 @@ export class GoogleMapsService {
 
   constructor(private readonly configService: ConfigService) {
     this.client = new Client({});
-
-    const key =
-      this.configService.get<string>('GOOGLE_MAPS_API_KEY') ||
-      this.configService.get<string>('Maps_API_KEY');
-
+    const key = this.configService.get<string>('GOOGLE_MAPS_BACKEND_API_KEY');
     if (!key) {
       throw new InternalServerErrorException(
-        'Variável de ambiente GOOGLE_MAPS_API_KEY/Maps_API_KEY não configurada.',
+        'Variável de ambiente GOOGLE_MAPS_BACKEND_API_KEY não configurada.',
       );
     }
     this.apiKey = key;

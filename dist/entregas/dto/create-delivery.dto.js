@@ -44,6 +44,12 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], DestinationLocationDto.prototype, "address", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => CoordinatesDto),
+    __metadata("design:type", CoordinatesDto)
+], DestinationLocationDto.prototype, "coordinates", void 0);
 class CreateDeliveryDto {
 }
 exports.CreateDeliveryDto = CreateDeliveryDto;
@@ -80,4 +86,19 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateDeliveryDto.prototype, "recolherSucata", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateDeliveryDto.prototype, "tipoEntrega", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateDeliveryDto.prototype, "tipoDocumento", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateDeliveryDto.prototype, "numeroDocumento", void 0);
 //# sourceMappingURL=create-delivery.dto.js.map
