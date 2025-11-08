@@ -27,6 +27,10 @@ let SocorrosController = class SocorrosController {
         const solicitanteId = request.user.sub;
         return this.socorrosService.create(createSocorroDto, solicitanteId);
     }
+    async findMySocorros(request) {
+        const driverId = request.user.sub;
+        return this.socorrosService.findAllByDriverId(driverId);
+    }
     async findOne(id) {
         return this.socorrosService.findOne(id);
     }
@@ -60,6 +64,13 @@ __decorate([
     __metadata("design:paramtypes", [create_socorro_dto_1.CreateSocorroDto, Object]),
     __metadata("design:returntype", Promise)
 ], SocorrosController.prototype, "create", null);
+__decorate([
+    (0, common_1.Get)('meus-socorros'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], SocorrosController.prototype, "findMySocorros", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id')),

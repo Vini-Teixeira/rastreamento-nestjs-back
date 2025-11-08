@@ -29,6 +29,12 @@ export class SocorrosController {
     return this.socorrosService.create(createSocorroDto, solicitanteId);
   }
 
+  @Get('meus-socorros')
+  async findMySocorros(@Req() request: { user: AuthenticatedUser }) {
+    const driverId = request.user.sub;
+    return this.socorrosService.findAllByDriverId(driverId);
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.socorrosService.findOne(id);
@@ -52,17 +58,19 @@ export class SocorrosController {
     return this.socorrosService.iniciarDeslocamento(socorroId, driverId);
   }
 
-  // Em socorros.controller.ts
-
-@Patch(':id/cheguei-ao-local')
-async chegueiAoLocal(
-  @Param('id') socorroId: string,
-  @Req() request: { user: AuthenticatedUser },
-  @Body() chegueiAoLocalDto: ChegueiAoLocalDto, // <-- Recebe o DTO do body
-) {
-  const driverId = request.user.sub;
-  return this.socorrosService.chegueiAoLocal(socorroId, driverId, chegueiAoLocalDto);
-}
+  @Patch(':id/cheguei-ao-local')
+  async chegueiAoLocal(
+    @Param('id') socorroId: string,
+    @Req() request: { user: AuthenticatedUser },
+    @Body() chegueiAoLocalDto: ChegueiAoLocalDto,
+  ) {
+    const driverId = request.user.sub;
+    return this.socorrosService.chegueiAoLocal(
+      socorroId,
+      driverId,
+      chegueiAoLocalDto,
+    );
+  }
 
   @Patch(':id/liberar-checkin')
   async liberarCheckIn(

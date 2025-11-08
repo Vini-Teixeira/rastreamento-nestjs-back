@@ -114,6 +114,7 @@ let EntregasService = EntregasService_1 = class EntregasService {
         }
     }
     async create(createDeliveryDto, solicitanteId) {
+        this.logger.debug(`[CHECKLIST] DTO Recebido: origemId=${createDeliveryDto.origemId}, solicitanteId=${solicitanteId}`);
         const { destination, itemDescription, origemId, recolherSucata } = createDeliveryDto;
         const idDaLojaDeOrigem = origemId || solicitanteId;
         const lojaDeOrigem = await this.lojistaModel
@@ -718,6 +719,11 @@ let EntregasService = EntregasService_1 = class EntregasService {
                 byDelivery.set(loc.deliveryId, []);
             byDelivery.get(loc.deliveryId).push(loc);
         }
+        const toGeoJSONWithTimestamp = (lat, lng, timestamp) => ({
+            type: 'Point',
+            coordinates: [lng, lat],
+            timestamp,
+        });
         for (const [deliveryId, points] of byDelivery.entries()) {
             try {
                 const delivery = await this.deliveryModel.findById(deliveryId);
@@ -742,21 +748,29 @@ let EntregasService = EntregasService_1 = class EntregasService {
                     delivery.routeHistory = [];
                 delivery.routeHistory.push(...toAdd);
                 const latest = points[points.length - 1];
-                delivery.driverCurrentLocation = toGeoJSONWithTimestamp(latest.lat, latest.lng, new Date(latest.timestamp));
-                await delivery.save();
+                const latestGeoPoint = toGeoJSONWithTimestamp(latest.lat, latest.lng, new Date(latest.timestamp));
+                delivery.driverCurrentLocation = latestGeoPoint;
+                const updatedDelivery = await delivery.save();
                 try {
-                    const geo = delivery.driverCurrentLocation;
-                    this.entregadoresGateway.emitDriverLocation(deliveryId, {
+                    const geo = updatedDelivery.driverCurrentLocation;
+                    const payload = {
                         driverId: String(deliveryDriverId),
                         location: {
                             type: geo.type,
                             coordinates: geo.coordinates,
-                            timestamp: new Date(latest.timestamp).toISOString(),
+                            timestamp: (geo.timestamp || new Date(latest.timestamp)).toISOString(),
                         },
-                    });
+                        routeHistory: (updatedDelivery.routeHistory ?? []).map((point) => ({
+                            type: point.type,
+                            coordinates: point.coordinates,
+                            timestamp: point.timestamp,
+                        })),
+                    };
+                    this.logger.log(`[WS-Sync] Emitindo 'novaLocalizacao' para ${deliveryId}. Histórico com ${payload.routeHistory.length} pontos.`);
+                    this.entregadoresGateway.emitDriverLocation(deliveryId, payload);
                 }
                 catch (err) {
-                    this.logger.error(`Erro ao emitir novaLocalizacao para a entrega ${deliveryId}`, err?.stack);
+                    this.logger.error(`Erro ao emitir novaLocalizacao para a entrega ${deliveryId} após sync`, err?.stack);
                 }
             }
             catch (error) {

@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var SocorrosService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SocorrosService = void 0;
 const common_1 = require("@nestjs/common");
@@ -22,7 +23,7 @@ const entregas_service_1 = require("../entregas/entregas.service");
 const entregadores_gateway_1 = require("../entregadores/entregadores.gateway");
 const entregador_schema_1 = require("../entregadores/schemas/entregador.schema");
 const fcm_service_1 = require("../fcm/fcm.service");
-let SocorrosService = class SocorrosService {
+let SocorrosService = SocorrosService_1 = class SocorrosService {
     constructor(socorroModel, entregadorModel, connection, googleMapsService, entregasService, entregadoresGateway, fcmService) {
         this.socorroModel = socorroModel;
         this.entregadorModel = entregadorModel;
@@ -31,13 +32,60 @@ let SocorrosService = class SocorrosService {
         this.entregasService = entregasService;
         this.entregadoresGateway = entregadoresGateway;
         this.fcmService = fcmService;
+        this.logger = new common_1.Logger(SocorrosService_1.name);
+    }
+    async findAllByDriverId(driverId) {
+        this.logger.log(`Buscando socorros ativos para o driverId: ${driverId}`);
+        const driverObjectId = new mongoose_2.Types.ObjectId(driverId);
+        return this.socorroModel
+            .find({
+            driverId: driverObjectId,
+            status: {
+                $in: [
+                    socorro_schema_1.SocorroStatus.PENDING,
+                    socorro_schema_1.SocorroStatus.ACCEPTED,
+                    socorro_schema_1.SocorroStatus.ON_THE_WAY,
+                    socorro_schema_1.SocorroStatus.ON_SITE,
+                ],
+            },
+        })
+            .sort({ createdAt: -1 })
+            .exec();
     }
     async create(createSocorroDto, lojistaId) {
-        const clientCoordinates = await this.googleMapsService.geocodeAddress(createSocorroDto.clientLocation.address);
+        this.logger.debug(`[CHECKLIST] DTO Recebido: ${JSON.stringify(createSocorroDto)}, solicitanteId=${lojistaId}`);
+        const { clientLocation, serviceDescription, clienteNome, clienteTelefone, placaVeiculo, modeloVeiculo, } = createSocorroDto;
+        let clientCoordinates;
+        if (clientLocation.coordinates) {
+            this.logger.log('Socorro: Coordenadas recebidas do frontend. Pulando geocoding.');
+            clientCoordinates = {
+                type: 'Point',
+                coordinates: [
+                    clientLocation.coordinates.lng,
+                    clientLocation.coordinates.lat,
+                ],
+            };
+        }
+        else {
+            this.logger.warn('Socorro: Coordenadas NÃO recebidas. Acionando geocoding manual (fallback)...');
+            try {
+                clientCoordinates = await this.googleMapsService.geocodeAddress(clientLocation.address);
+                if (!clientCoordinates ||
+                    (clientCoordinates.coordinates[0] === 0 &&
+                        clientCoordinates.coordinates[1] === 0)) {
+                    throw new Error('Geocoding manual (Socorro) retornou coordenadas inválidas.');
+                }
+            }
+            catch (error) {
+                this.logger.error(`Falha no geocoding manual (Socorro): ${error.message}`);
+                throw new common_1.BadRequestException('O endereço do cliente (manual) não pôde ser encontrado ou é inválido.');
+            }
+        }
         const nearestDriver = await this.entregasService.findNearestDriverInfo(clientCoordinates);
         if (!nearestDriver) {
             throw new common_1.NotFoundException('Nenhum entregador disponível encontrado.');
         }
+        this.logger.log(`Socorro: Entregador mais próximo: ${nearestDriver.nome} a ${nearestDriver.distanciaCalculada.toFixed(0)} metros.`);
         let codigoUnico = '';
         let codigoJaExiste = true;
         while (codigoJaExiste) {
@@ -49,15 +97,21 @@ let SocorrosService = class SocorrosService {
                 codigoJaExiste = false;
             }
         }
+        this.logger.log(`Socorro: Código único gerado: ${codigoUnico}`);
         const newSocorro = new this.socorroModel({
-            lojistaId,
+            solicitanteId: lojistaId,
             driverId: nearestDriver._id,
             clientLocation: {
-                address: createSocorroDto.clientLocation.address,
+                address: clientLocation.address,
                 coordinates: clientCoordinates,
             },
-            serviceDescription: createSocorroDto.serviceDescription,
             codigoSocorro: codigoUnico,
+            status: 'pendente',
+            clienteNome: clienteNome,
+            clienteTelefone: clienteTelefone,
+            placaVeiculo: placaVeiculo,
+            modeloVeiculo: modeloVeiculo,
+            serviceDescription: serviceDescription,
         });
         const savedSocorro = await newSocorro.save();
         this.entregadoresGateway.notifyNewDelivery(nearestDriver._id.toString(), savedSocorro.toObject());
@@ -165,21 +219,43 @@ let SocorrosService = class SocorrosService {
         return savedSocorro;
     }
     async finalizarSocorro(socorroId, driverId, finalizarSocorroDto) {
-        const socorro = await this.socorroModel.findById(socorroId).exec();
-        if (!socorro) {
-            throw new common_1.NotFoundException('Socorro não encontrado.');
+        const session = await this.connection.startSession();
+        session.startTransaction();
+        try {
+            const socorro = await this.socorroModel
+                .findById(socorroId)
+                .session(session);
+            if (!socorro) {
+                throw new common_1.NotFoundException('Socorro não encontrado.');
+            }
+            if (socorro.driverId?.toString() !== driverId) {
+                throw new common_1.ForbiddenException('Este socorro não lhe pertence.');
+            }
+            if (socorro.status !== socorro_schema_1.SocorroStatus.ON_SITE) {
+                throw new common_1.BadRequestException('Apenas socorros com status "no local" podem ser finalizados.');
+            }
+            socorro.fotos = finalizarSocorroDto.fotos;
+            socorro.status = socorro_schema_1.SocorroStatus.COMPLETED;
+            const socorroSavePromise = socorro.save({ session });
+            const driverUpdatePromise = this.entregadorModel
+                .updateOne({ _id: new mongoose_2.Types.ObjectId(driverId) }, { $set: { emEntrega: false } }, { session })
+                .exec();
+            const [savedSocorro] = await Promise.all([
+                socorroSavePromise,
+                driverUpdatePromise,
+            ]);
+            await session.commitTransaction();
+            this.entregadoresGateway.notifyDeliveryStatusChanged(savedSocorro);
+            return savedSocorro;
         }
-        if (socorro.driverId?.toString() !== driverId) {
-            throw new common_1.ForbiddenException('Este socorro não lhe pertence.');
+        catch (error) {
+            await session.abortTransaction();
+            this.logger.error(`Falha ao finalizar socorro (transação revertida): ${error.message}`);
+            throw error;
         }
-        if (socorro.status !== socorro_schema_1.SocorroStatus.ON_SITE) {
-            throw new common_1.BadRequestException('Apenas socorros com status "no local" podem ser finalizados.');
+        finally {
+            session.endSession();
         }
-        socorro.fotos = finalizarSocorroDto.fotos;
-        socorro.status = socorro_schema_1.SocorroStatus.COMPLETED;
-        const savedSocorro = await socorro.save();
-        this.entregadoresGateway.notifyDeliveryStatusChanged(savedSocorro);
-        return savedSocorro;
     }
     gerarCodigoAleatorio(tamanho) {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -191,7 +267,7 @@ let SocorrosService = class SocorrosService {
     }
 };
 exports.SocorrosService = SocorrosService;
-exports.SocorrosService = SocorrosService = __decorate([
+exports.SocorrosService = SocorrosService = SocorrosService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(socorro_schema_1.Socorro.name)),
     __param(1, (0, mongoose_1.InjectModel)(entregador_schema_1.Entregador.name)),

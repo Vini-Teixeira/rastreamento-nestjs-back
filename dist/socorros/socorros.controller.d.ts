@@ -13,6 +13,9 @@ export declare class SocorrosController {
     }> & {
         __v: number;
     }>;
+    findMySocorros(request: {
+        user: AuthenticatedUser;
+    }): Promise<import("./schemas/socorro.schema").Socorro[]>;
     findOne(id: string): Promise<import("mongoose").Document<unknown, {}, import("./schemas/socorro.schema").Socorro, {}> & import("./schemas/socorro.schema").Socorro & Required<{
         _id: unknown;
     }> & {

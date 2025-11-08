@@ -169,6 +169,7 @@ export class EntregasService {
     createDeliveryDto: CreateDeliveryDto,
     solicitanteId: string,
   ): Promise<Delivery> {
+    this.logger.debug(`[CHECKLIST] DTO Recebido: origemId=${createDeliveryDto.origemId}, solicitanteId=${solicitanteId}`);
     const { destination, itemDescription, origemId, recolherSucata } =
       createDeliveryDto;
     const idDaLojaDeOrigem = origemId || solicitanteId;
@@ -985,7 +986,6 @@ export class EntregasService {
 
     if (!delivery.routeHistory) delivery.routeHistory = [];
     delivery.routeHistory.push(toGeoJSONWithTimestamp(lat, lng, new Date()));
-
     return delivery.save();
   }
 
@@ -1055,99 +1055,126 @@ export class EntregasService {
   }
 
   async bulkUpdateDriverLocations(
-    driverId: string,
-    locations: Array<{
-      deliveryId: string;
-      lat: number;
-      lng: number;
-      timestamp: Date;
-    }>,
-  ): Promise<void> {
-    this.logger.log(
-      `Sincronizando ${locations.length} pontos de localização para o entregador ${driverId}`,
-    );
+  driverId: string,
+  locations: Array<{
+    deliveryId: string;
+    lat: number;
+    lng: number;
+    timestamp: Date;
+  }>,
+): Promise<void> {
+  this.logger.log(
+    `Sincronizando ${locations.length} pontos de localização para o entregador ${driverId}`,
+  );
 
-    const byDelivery = new Map<
-      string,
-      Array<{ deliveryId: string; lat: number; lng: number; timestamp: Date }>
-    >();
-    for (const loc of locations) {
-      if (!byDelivery.has(loc.deliveryId)) byDelivery.set(loc.deliveryId, []);
-      byDelivery.get(loc.deliveryId)!.push(loc);
-    }
+  const byDelivery = new Map<
+    string,
+    Array<{ deliveryId: string; lat: number; lng: number; timestamp: Date }>
+  >();
+  for (const loc of locations) {
+    if (!byDelivery.has(loc.deliveryId)) byDelivery.set(loc.deliveryId, []);
+    byDelivery.get(loc.deliveryId)!.push(loc);
+  }
 
-    for (const [deliveryId, points] of byDelivery.entries()) {
-      try {
-        const delivery = await this.deliveryModel.findById(deliveryId);
-        if (!delivery) {
-          this.logger.warn(
-            `Sync: Entrega com ID ${deliveryId} não encontrada.`,
-          );
-          continue;
-        }
-        if (!delivery.driverId) {
-          this.logger.error(
-            `Sync: A entrega ${deliveryId} não possui um entregador associado.`,
-          );
-          continue;
-        }
+  // Helper para converter o formato (pode já existir no seu arquivo)
+  const toGeoJSONWithTimestamp = (lat: number, lng: number, timestamp: Date): Coordinates => ({
+      type: 'Point',
+      coordinates: [lng, lat],
+      timestamp,
+  });
 
-        const deliveryDriverId =
-          (delivery.driverId as any)?._id?.toString() ??
-          (delivery.driverId as any)?.toString() ??
-          '';
-
-        if (String(deliveryDriverId) !== String(driverId)) {
-          this.logger.error(
-            `Sync: Não autorizado. Entregador ${driverId} tentando atualizar entrega ${deliveryId}`,
-          );
-          continue;
-        }
-
-        points.sort(
-          (a, b) =>
-            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  for (const [deliveryId, points] of byDelivery.entries()) {
+    try {
+      const delivery = await this.deliveryModel.findById(deliveryId);
+      if (!delivery) {
+        this.logger.warn(
+          `Sync: Entrega com ID ${deliveryId} não encontrada.`,
         );
-
-        const toAdd: Coordinates[] = points.map((p) =>
-          toGeoJSONWithTimestamp(p.lat, p.lng, new Date(p.timestamp)),
-        );
-
-        if (!delivery.routeHistory) delivery.routeHistory = [];
-        delivery.routeHistory.push(...toAdd);
-
-        const latest = points[points.length - 1];
-        (delivery as any).driverCurrentLocation = toGeoJSONWithTimestamp(
-          latest.lat,
-          latest.lng,
-          new Date(latest.timestamp),
-        ) as any;
-
-        await delivery.save();
-
-        try {
-          const geo = delivery.driverCurrentLocation as Coordinates;
-          this.entregadoresGateway.emitDriverLocation(deliveryId, {
-            driverId: String(deliveryDriverId),
-            location: {
-              type: geo.type,
-              coordinates: geo.coordinates,
-              timestamp: new Date(latest.timestamp).toISOString(),
-            },
-          });
-        } catch (err) {
-          this.logger.error(
-            `Erro ao emitir novaLocalizacao para a entrega ${deliveryId}`,
-            (err as any)?.stack,
-          );
-        }
-      } catch (error) {
+        continue;
+      }
+      if (!delivery.driverId) {
         this.logger.error(
-          `Erro ao sincronizar pontos para a entrega ${deliveryId}: ${(error as any).message}`,
+          `Sync: A entrega ${deliveryId} não possui um entregador associado.`,
+        );
+        continue;
+      }
+
+      const deliveryDriverId =
+        (delivery.driverId as any)?._id?.toString() ??
+        (delivery.driverId as any)?.toString() ??
+        '';
+
+      if (String(deliveryDriverId) !== String(driverId)) {
+        this.logger.error(
+          `Sync: Não autorizado. Entregador ${driverId} tentando atualizar entrega ${deliveryId}`,
+        );
+        continue;
+      }
+
+      points.sort(
+        (a, b) =>
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+
+      const toAdd: Coordinates[] = points.map((p) =>
+        toGeoJSONWithTimestamp(p.lat, p.lng, new Date(p.timestamp)),
+      );
+
+      if (!delivery.routeHistory) delivery.routeHistory = [];
+      delivery.routeHistory.push(...toAdd);
+
+      const latest = points[points.length - 1];
+      const latestGeoPoint = toGeoJSONWithTimestamp(
+        latest.lat,
+        latest.lng,
+        new Date(latest.timestamp),
+      );
+      (delivery as any).driverCurrentLocation = latestGeoPoint as any;
+
+      // Salva todas as atualizações no banco de dados
+      const updatedDelivery = await delivery.save();
+
+      // --- ✨ ESTA É A CORREÇÃO (RESTAURANDO O PAYLOAD) ✨ ---
+      try {
+        const geo = updatedDelivery.driverCurrentLocation as Coordinates;
+
+        // 1. Construir o payload COMPLETO
+        const payload = {
+          driverId: String(deliveryDriverId),
+          location: {
+            type: geo.type,
+            coordinates: geo.coordinates,
+            timestamp: (geo.timestamp || new Date(latest.timestamp)).toISOString(),
+          },
+          routeHistory: (updatedDelivery.routeHistory ?? []).map((point) => ({
+            type: point.type,
+            coordinates: point.coordinates,
+            timestamp: point.timestamp,
+          })),
+        };
+        
+        this.logger.log(
+         `[WS-Sync] Emitindo 'novaLocalizacao' para ${deliveryId}. Histórico com ${payload.routeHistory.length} pontos.`
+        );
+
+        // 3. Emitir o payload completo
+        this.entregadoresGateway.emitDriverLocation(deliveryId, payload);
+
+      } catch (err) {
+        this.logger.error(
+          `Erro ao emitir novaLocalizacao para a entrega ${deliveryId} após sync`,
+          (err as any)?.stack,
         );
       }
+      // --- FIM DA CORREÇÃO ---
+
+    } catch (error) {
+      this.logger.error(
+        `Erro ao sincronizar pontos para a entrega ${deliveryId}: ${(error as any).message}`,
+      );
     }
   }
+}
 }
 
 function gerarCodigoAleatorio(tamanho: number): string {

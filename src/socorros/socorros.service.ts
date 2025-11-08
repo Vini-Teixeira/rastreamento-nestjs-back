@@ -5,6 +5,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { Model, Connection, Types } from 'mongoose';
@@ -17,9 +18,12 @@ import { Entregador } from 'src/entregadores/schemas/entregador.schema';
 import { ChegueiAoLocalDto } from './dto/cheguei-ao-local.dto';
 import { FinalizarSocorroDto } from './dto/finalizar-socorro.dto';
 import { FcmService } from 'src/fcm/fcm.service';
+import { Coordinates } from 'src/entregas/schemas/delivery.schema';
 
 @Injectable()
 export class SocorrosService {
+  private readonly logger = new Logger(SocorrosService.name);
+
   constructor(
     @InjectModel(Socorro.name) private readonly socorroModel: Model<Socorro>,
     @InjectModel(Entregador.name)
@@ -32,10 +36,80 @@ export class SocorrosService {
     private readonly fcmService: FcmService,
   ) {}
 
+  async findAllByDriverId(driverId: string): Promise<Socorro[]> {
+    this.logger.log(`Buscando socorros ativos para o driverId: ${driverId}`);
+
+    const driverObjectId = new Types.ObjectId(driverId);
+    return this.socorroModel
+      .find({
+        driverId: driverObjectId,
+        status: {
+          $in: [
+            SocorroStatus.PENDING,
+            SocorroStatus.ACCEPTED,
+            SocorroStatus.ON_THE_WAY,
+            SocorroStatus.ON_SITE,
+          ],
+        },
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
   async create(createSocorroDto: CreateSocorroDto, lojistaId: string) {
-    const clientCoordinates = await this.googleMapsService.geocodeAddress(
-      createSocorroDto.clientLocation.address,
+    this.logger.debug(
+      `[CHECKLIST] DTO Recebido: ${JSON.stringify(createSocorroDto)}, solicitanteId=${lojistaId}`,
     );
+    const {
+      clientLocation,
+      serviceDescription,
+      clienteNome,
+      clienteTelefone,
+      placaVeiculo,
+      modeloVeiculo,
+    } = createSocorroDto;
+    // --- FIM DA CORREÇÃO ---
+
+    // --- Lógica Inteligente (Já está correta) ---
+    let clientCoordinates: Coordinates;
+    if (clientLocation.coordinates) {
+      this.logger.log(
+        'Socorro: Coordenadas recebidas do frontend. Pulando geocoding.',
+      );
+      clientCoordinates = {
+        type: 'Point',
+        coordinates: [
+          clientLocation.coordinates.lng,
+          clientLocation.coordinates.lat,
+        ],
+      };
+    } else {
+      this.logger.warn(
+        'Socorro: Coordenadas NÃO recebidas. Acionando geocoding manual (fallback)...',
+      );
+      try {
+        clientCoordinates = await this.googleMapsService.geocodeAddress(
+          clientLocation.address,
+        );
+        if (
+          !clientCoordinates ||
+          (clientCoordinates.coordinates[0] === 0 &&
+            clientCoordinates.coordinates[1] === 0)
+        ) {
+          throw new Error(
+            'Geocoding manual (Socorro) retornou coordenadas inválidas.',
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `Falha no geocoding manual (Socorro): ${error.message}`,
+        );
+        throw new BadRequestException(
+          'O endereço do cliente (manual) não pôde ser encontrado ou é inválido.',
+        );
+      }
+    }
+    // --- Fim da Lógica Inteligente ---
 
     const nearestDriver = await this.entregasService.findNearestDriverInfo(
       clientCoordinates as any,
@@ -43,6 +117,9 @@ export class SocorrosService {
     if (!nearestDriver) {
       throw new NotFoundException('Nenhum entregador disponível encontrado.');
     }
+    this.logger.log(
+      `Socorro: Entregador mais próximo: ${nearestDriver.nome} a ${nearestDriver.distanciaCalculada.toFixed(0)} metros.`,
+    );
 
     let codigoUnico: string = '';
     let codigoJaExiste = true;
@@ -55,25 +132,30 @@ export class SocorrosService {
         codigoJaExiste = false;
       }
     }
+    this.logger.log(`Socorro: Código único gerado: ${codigoUnico}`);
 
     const newSocorro = new this.socorroModel({
-      lojistaId,
+      solicitanteId: lojistaId,
       driverId: nearestDriver._id,
       clientLocation: {
-        address: createSocorroDto.clientLocation.address,
+        address: clientLocation.address,
         coordinates: clientCoordinates,
       },
-      serviceDescription: createSocorroDto.serviceDescription,
       codigoSocorro: codigoUnico,
+      status: 'pendente',
+      clienteNome: clienteNome,
+      clienteTelefone: clienteTelefone,
+      placaVeiculo: placaVeiculo,
+      modeloVeiculo: modeloVeiculo,
+      serviceDescription: serviceDescription,
+      // --- FIM DA CORREÇÃO ---
     });
 
     const savedSocorro = await newSocorro.save();
-
     this.entregadoresGateway.notifyNewDelivery(
       nearestDriver._id.toString(),
       savedSocorro.toObject(),
     );
-
     if (nearestDriver.fcmToken) {
       this.fcmService.sendPushNotification(
         nearestDriver.fcmToken,
@@ -104,7 +186,6 @@ export class SocorrosService {
         throw new NotFoundException('Socorro não encontrado.');
       }
 
-      // Validações
       if (socorro.driverId?.toString() !== driverId) {
         throw new ForbiddenException(
           'Este socorro já foi atribuído a outro entregador.',
@@ -113,7 +194,6 @@ export class SocorrosService {
       if (socorro.status !== SocorroStatus.PENDING) {
         throw new BadRequestException('Este socorro não está mais pendente.');
       }
-
       socorro.driverId = new Types.ObjectId(driverId);
       socorro.status = SocorroStatus.ACCEPTED;
       const socorroSavePromise = socorro.save({ session });
@@ -222,9 +302,7 @@ export class SocorrosService {
 
     socorro.checkInLiberadoManualmente = true;
     const savedSocorro = await socorro.save();
-
     this.entregadoresGateway.notifyDeliveryStatusChanged(savedSocorro);
-
     return savedSocorro;
   }
 
@@ -233,28 +311,52 @@ export class SocorrosService {
     driverId: string,
     finalizarSocorroDto: FinalizarSocorroDto,
   ) {
-    const socorro = await this.socorroModel.findById(socorroId).exec();
-    if (!socorro) {
-      throw new NotFoundException('Socorro não encontrado.');
-    }
+    const session = await this.connection.startSession();
+    session.startTransaction();
 
-    // Validações
-    if (socorro.driverId?.toString() !== driverId) {
-      throw new ForbiddenException('Este socorro não lhe pertence.');
-    }
-    if (socorro.status !== SocorroStatus.ON_SITE) {
-      throw new BadRequestException(
-        'Apenas socorros com status "no local" podem ser finalizados.',
+    try {
+      const socorro = await this.socorroModel
+        .findById(socorroId)
+        .session(session);
+      if (!socorro) {
+        throw new NotFoundException('Socorro não encontrado.');
+      }
+
+      if (socorro.driverId?.toString() !== driverId) {
+        throw new ForbiddenException('Este socorro não lhe pertence.');
+      }
+      if (socorro.status !== SocorroStatus.ON_SITE) {
+        throw new BadRequestException(
+          'Apenas socorros com status "no local" podem ser finalizados.',
+        );
+      }
+
+      socorro.fotos = finalizarSocorroDto.fotos;
+      socorro.status = SocorroStatus.COMPLETED;
+      const socorroSavePromise = socorro.save({ session });
+      const driverUpdatePromise = this.entregadorModel
+        .updateOne(
+          { _id: new Types.ObjectId(driverId) },
+          { $set: { emEntrega: false } },
+          { session },
+        )
+        .exec();
+      const [savedSocorro] = await Promise.all([
+        socorroSavePromise,
+        driverUpdatePromise,
+      ]);
+      await session.commitTransaction();
+      this.entregadoresGateway.notifyDeliveryStatusChanged(savedSocorro);
+      return savedSocorro;
+    } catch (error) {
+      await session.abortTransaction();
+      this.logger.error(
+        `Falha ao finalizar socorro (transação revertida): ${error.message}`,
       );
+      throw error;
+    } finally {
+      session.endSession();
     }
-
-    socorro.fotos = finalizarSocorroDto.fotos;
-    socorro.status = SocorroStatus.COMPLETED;
-    const savedSocorro = await socorro.save();
-
-    this.entregadoresGateway.notifyDeliveryStatusChanged(savedSocorro);
-
-    return savedSocorro;
   }
 
   private gerarCodigoAleatorio(tamanho: number): string {

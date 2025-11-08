@@ -59,6 +59,22 @@ __decorate([
     __metadata("design:type", delivery_schema_1.Location)
 ], Socorro.prototype, "driverStartlocation", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ required: true, trim: true }),
+    __metadata("design:type", String)
+], Socorro.prototype, "clienteNome", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true, trim: true }),
+    __metadata("design:type", String)
+], Socorro.prototype, "clienteTelefone", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, trim: true }),
+    __metadata("design:type", String)
+], Socorro.prototype, "placaVeiculo", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, trim: true }),
+    __metadata("design:type", String)
+], Socorro.prototype, "modeloVeiculo", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ type: String }),
     __metadata("design:type", String)
 ], Socorro.prototype, "serviceDescription", void 0);

@@ -16,7 +16,7 @@ class FinalizarSocorroDto {
 exports.FinalizarSocorroDto = FinalizarSocorroDto;
 __decorate([
     (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.ArrayMinSize)(3),
+    (0, class_validator_1.ArrayMinSize)(2),
     (0, class_validator_1.IsString)({ each: true }),
     __metadata("design:type", Array)
 ], FinalizarSocorroDto.prototype, "fotos", void 0);

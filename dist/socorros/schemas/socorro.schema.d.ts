@@ -15,6 +15,10 @@ export declare class Socorro extends MongooseDocument {
     status: SocorroStatus;
     clientLocation: Location;
     driverStartlocation?: Location;
+    clienteNome: string;
+    clienteTelefone: string;
+    placaVeiculo?: string;
+    modeloVeiculo?: string;
     serviceDescription?: string;
     checkInLiberadoManualmente: boolean;
     fotos: string[];

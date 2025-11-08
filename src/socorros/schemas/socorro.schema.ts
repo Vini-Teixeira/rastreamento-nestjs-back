@@ -44,6 +44,18 @@ export class Socorro extends MongooseDocument {
   @Prop({ type: LocationSchema })
   driverStartlocation?: Location;
 
+  @Prop({ required: true, trim: true })
+  clienteNome: string;
+
+  @Prop({ required: true, trim: true })
+  clienteTelefone: string;
+
+  @Prop({ required: false, trim: true })
+  placaVeiculo?: string;
+
+  @Prop({ required: false, trim: true})
+  modeloVeiculo?: string;
+
   @Prop({ type: String })
   serviceDescription?: string;
 

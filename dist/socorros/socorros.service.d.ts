@@ -16,7 +16,9 @@ export declare class SocorrosService {
     private readonly entregasService;
     private readonly entregadoresGateway;
     private readonly fcmService;
+    private readonly logger;
     constructor(socorroModel: Model<Socorro>, entregadorModel: Model<Entregador>, connection: Connection, googleMapsService: GoogleMapsService, entregasService: EntregasService, entregadoresGateway: EntregadoresGateway, fcmService: FcmService);
+    findAllByDriverId(driverId: string): Promise<Socorro[]>;
     create(createSocorroDto: CreateSocorroDto, lojistaId: string): Promise<import("mongoose").Document<unknown, {}, Socorro, {}> & Socorro & Required<{
         _id: unknown;
     }> & {
