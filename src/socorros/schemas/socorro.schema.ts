@@ -4,12 +4,13 @@ import {
   HydratedDocument,
   Types,
 } from 'mongoose';
+import { timestamp } from 'rxjs';
 import { Location, LocationSchema } from 'src/entregas/schemas/delivery.schema';
 
 export enum SocorroStatus {
   PENDING = 'pendente',
   ACCEPTED = 'aceito',
-  ON_THE_WAY = 'à_caminho',
+  ON_THE_WAY = 'a_caminho',
   ON_SITE = 'no_local',
   COMPLETED = 'concluído',
   CANCELLED = 'cancelado',
@@ -38,6 +39,25 @@ export class Socorro extends MongooseDocument {
   })
   status: SocorroStatus;
 
+  @Prop({
+  type: [
+    {
+      motivo: { type: String, required: true },
+      texto: { type: String },
+      driverId: { type: Types.ObjectId, ref: 'Entregador' },
+      timestamp: { type: Date, default: Date.now },
+    },
+  ],
+  default: [],
+})
+historicoRejeicoes: {
+  motivo: string;
+  texto?: string;
+  driverId: Types.ObjectId;
+  timestamp: Date;
+}[];
+
+
   @Prop({ required: true, type: LocationSchema })
   clientLocation: Location;
 
@@ -48,12 +68,15 @@ export class Socorro extends MongooseDocument {
   clienteNome: string;
 
   @Prop({ required: true, trim: true })
+  solicitanteNome: string;
+
+  @Prop({ required: true, trim: true })
   clienteTelefone: string;
 
   @Prop({ required: false, trim: true })
   placaVeiculo?: string;
 
-  @Prop({ required: false, trim: true})
+  @Prop({ required: false, trim: true })
   modeloVeiculo?: string;
 
   @Prop({ type: String })

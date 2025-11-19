@@ -31,10 +31,17 @@ export declare class EntregadoresGateway implements OnGatewayConnection, OnGatew
     }): void;
     notifyNewDelivery(driverId: string, delivery: any): void;
     notifyDeliveryStatusChanged(delivery: any): void;
+    notifySocorroStatusChanged(socorro: any): void;
+    notifyStoreSelfDelivery(delivery: any): void;
+    notifyStorePartnerDelivery(delivery: any): void;
+    notifyStoreDeliveryWarning(delivery: any): void;
+    notifyStoreDeliveryUnassigned(delivery: any): void;
+    notifyStoreSocorroCreated(socorro: any): void;
     emitDriverLocation(deliveryId: string, payload: any): void;
     handleLocationUpdate(data: {
         deliveryId: string;
         lat: number;
         lng: number;
     }): Promise<void>;
+    private _getSafeId;
 }

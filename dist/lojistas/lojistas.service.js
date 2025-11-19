@@ -31,26 +31,28 @@ let LojistasService = class LojistasService {
     }
     async getDashboardSummary(solicitanteId) {
         const id = new mongoose_2.Types.ObjectId(solicitanteId);
-        const statusConcluido = [
-            delivery_status_enum_1.DeliveryStatus.FINALIZADO
-        ];
+        const statusConcluido = [delivery_status_enum_1.DeliveryStatus.FINALIZADO];
         const statusEmAndamento = [
             delivery_status_enum_1.DeliveryStatus.PENDENTE,
             delivery_status_enum_1.DeliveryStatus.ACEITO,
             delivery_status_enum_1.DeliveryStatus.A_CAMINHO,
             delivery_status_enum_1.DeliveryStatus.EM_ATENDIMENTO,
         ];
-        const statusCancelado = [
-            delivery_status_enum_1.DeliveryStatus.CANCELADO
-        ];
+        const statusCancelado = [delivery_status_enum_1.DeliveryStatus.CANCELADO];
         const deliverySummary = await this.deliveryModel.aggregate([
             { $match: { solicitanteId: id } },
             {
                 $group: {
                     _id: null,
-                    concluidas: { $sum: { $cond: [{ $in: ['$status', statusConcluido] }, 1, 0] } },
-                    emAndamento: { $sum: { $cond: [{ $in: ['$status', statusEmAndamento] }, 1, 0] } },
-                    canceladas: { $sum: { $cond: [{ $in: ['$status', statusCancelado] }, 1, 0] } },
+                    concluidas: {
+                        $sum: { $cond: [{ $in: ['$status', statusConcluido] }, 1, 0] },
+                    },
+                    emAndamento: {
+                        $sum: { $cond: [{ $in: ['$status', statusEmAndamento] }, 1, 0] },
+                    },
+                    canceladas: {
+                        $sum: { $cond: [{ $in: ['$status', statusCancelado] }, 1, 0] },
+                    },
                 },
             },
         ]);
@@ -59,20 +61,35 @@ let LojistasService = class LojistasService {
             {
                 $group: {
                     _id: null,
-                    concluidas: { $sum: { $cond: [{ $in: ['$status', statusConcluido] }, 1, 0] } },
-                    emAndamento: { $sum: { $cond: [{ $in: ['$status', statusEmAndamento] }, 1, 0] } },
-                    canceladas: { $sum: { $cond: [{ $in: ['$status', statusCancelado] }, 1, 0] } },
+                    concluidas: {
+                        $sum: { $cond: [{ $in: ['$status', statusConcluido] }, 1, 0] },
+                    },
+                    emAndamento: {
+                        $sum: { $cond: [{ $in: ['$status', statusEmAndamento] }, 1, 0] },
+                    },
+                    canceladas: {
+                        $sum: { $cond: [{ $in: ['$status', statusCancelado] }, 1, 0] },
+                    },
                 },
             },
         ]);
-        const totalConcluidas = (deliverySummary[0]?.concluidas || 0) + (socorroSummary[0]?.concluidas || 0);
-        const totalEmAndamento = (deliverySummary[0]?.emAndamento || 0) + (socorroSummary[0]?.emAndamento || 0);
-        const totalCanceladas = (deliverySummary[0]?.canceladas || 0) + (socorroSummary[0]?.canceladas || 0);
+        const totalConcluidas = (deliverySummary[0]?.concluidas || 0) +
+            (socorroSummary[0]?.concluidas || 0);
+        const totalEmAndamento = (deliverySummary[0]?.emAndamento || 0) +
+            (socorroSummary[0]?.emAndamento || 0);
+        const totalCanceladas = (deliverySummary[0]?.canceladas || 0) +
+            (socorroSummary[0]?.canceladas || 0);
         return {
             concluidas: totalConcluidas,
             emAndamento: totalEmAndamento,
             canceladas: totalCanceladas,
         };
+    }
+    async findById(id) {
+        if (!mongoose_2.Types.ObjectId.isValid(id)) {
+            return null;
+        }
+        return this.lojistaModel.findById(id).exec();
     }
     async create(createLojistaDto) {
         const { email, endereco } = createLojistaDto;
@@ -97,7 +114,9 @@ let LojistasService = class LojistasService {
             const coordinates = await this.googleMapsService.geocodeAddress(updateLojistaDto.endereco);
             updateLojistaDto.coordinates = coordinates;
         }
-        return this.lojistaModel.findByIdAndUpdate(id, updateLojistaDto, { new: true }).exec();
+        return this.lojistaModel
+            .findByIdAndUpdate(id, updateLojistaDto, { new: true })
+            .exec();
     }
     async delete(id) {
         return this.lojistaModel.findByIdAndDelete(id).exec();

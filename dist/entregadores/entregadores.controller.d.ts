@@ -12,6 +12,7 @@ export declare class EntregadoresController {
     private readonly entregadoresService;
     private readonly authService;
     constructor(entregadoresService: EntregadoresService, authService: AuthService);
+    getAvailableDrivers(): Promise<import("./schemas/entregador.schema").Entregador[]>;
     heartbeat(request: {
         user: AuthenticatedUser;
     }): Promise<void>;

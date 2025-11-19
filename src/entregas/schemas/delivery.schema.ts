@@ -6,6 +6,7 @@ import {
 } from 'mongoose';
 import { RejeicaoDto } from '../dto/rejeicao.dto';
 import { DeliveryStatus } from '../enums/delivery-status.enum';
+import { EModoPagamento } from '../enums/pagamento.enum';
 
 @Schema({ _id: false })
 export class Coordinates {
@@ -37,6 +38,9 @@ export class Location {
 
   @Prop({ required: true, type: CoordinatesSchema })
   coordinates: Coordinates;
+
+  @Prop()
+  name?: string;
 }
 export const LocationSchema = SchemaFactory.createForClass(Location);
 
@@ -61,6 +65,18 @@ export const RejeicaoInfoSchema = SchemaFactory.createForClass(RejeicaoInfo);
 
 @Schema({ timestamps: true })
 export class Delivery extends MongooseDocument {
+  @Prop({ required: true })
+  clienteNome: string;
+
+  @Prop({ required: true })
+  clienteTelefone: string;
+
+  @Prop({ required: true, enum: Object.values(EModoPagamento) })
+  modalidadePagamento: string;
+
+  @Prop({ type: String, required: false, default: '' })
+  observacoes: string;
+
   @Prop({ required: true, type: LocationSchema })
   origin: Location;
 
@@ -80,8 +96,8 @@ export class Delivery extends MongooseDocument {
   @Prop({ type: Types.ObjectId, ref: 'Lojista', required: true })
   solicitanteId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Lojista', required: true  })
-  origemId: Types.ObjectId
+  @Prop({ type: Types.ObjectId, ref: 'Lojista', required: true })
+  origemId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'Entregador', default: null })
   driverId?: Types.ObjectId;
@@ -107,8 +123,17 @@ export class Delivery extends MongooseDocument {
   @Prop({ type: [RejeicaoDto], default: [] })
   historicoRejeicoes: RejeicaoInfo[];
 
+  @Prop({ type: [Types.ObjectId], ref: 'Entregador', default: [] })
+  rejectedBy: Types.ObjectId[];
+
+  @Prop({ type: Number, default: 0 })
+  rejectionCount: number;
+
   @Prop({ type: Boolean, default: false })
   recolherSucata: boolean;
+
+  @Prop()
+  tipoEntrega?: string;
 
   @Prop()
   createdAt?: Date;

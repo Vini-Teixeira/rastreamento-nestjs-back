@@ -3,7 +3,7 @@ import { Location } from 'src/entregas/schemas/delivery.schema';
 export declare enum SocorroStatus {
     PENDING = "pendente",
     ACCEPTED = "aceito",
-    ON_THE_WAY = "\u00E0_caminho",
+    ON_THE_WAY = "a_caminho",
     ON_SITE = "no_local",
     COMPLETED = "conclu\u00EDdo",
     CANCELLED = "cancelado"
@@ -13,9 +13,16 @@ export declare class Socorro extends MongooseDocument {
     solicitanteId: Types.ObjectId;
     driverId?: Types.ObjectId;
     status: SocorroStatus;
+    historicoRejeicoes: {
+        motivo: string;
+        texto?: string;
+        driverId: Types.ObjectId;
+        timestamp: Date;
+    }[];
     clientLocation: Location;
     driverStartlocation?: Location;
     clienteNome: string;
+    solicitanteNome: string;
     clienteTelefone: string;
     placaVeiculo?: string;
     modeloVeiculo?: string;

@@ -1,8 +1,9 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { LojistasService } from "./lojistas.service";
 import { LojistasController } from "./lojistas.controller";
 import { Lojista, LojistaSchema } from './schemas/lojista.schema';
+import { SocorroModule } from "src/socorros/socorro.module";
 import { JwtModule } from "@nestjs/jwt";
 import { AuthModule } from "src/auth/auth.module";
 import { GoogleMapsModule } from "src/google-maps/google-maps.module";
@@ -13,6 +14,7 @@ import { Socorro, SocorroSchema } from 'src/socorros/schemas/socorro.schema';
   imports: [GoogleMapsModule,
     AuthModule,
     JwtModule,
+    forwardRef(() => SocorroModule),
     MongooseModule.forFeature([
       { name: Lojista.name, schema: LojistaSchema },
       { name: Delivery.name, schema: DeliverySchema },

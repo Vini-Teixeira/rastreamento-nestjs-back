@@ -14,6 +14,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const rejeicao_dto_1 = require("../dto/rejeicao.dto");
 const delivery_status_enum_1 = require("../enums/delivery-status.enum");
+const pagamento_enum_1 = require("../enums/pagamento.enum");
 let Coordinates = class Coordinates {
 };
 exports.Coordinates = Coordinates;
@@ -53,6 +54,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, type: exports.CoordinatesSchema }),
     __metadata("design:type", Coordinates)
 ], Location.prototype, "coordinates", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Location.prototype, "name", void 0);
 exports.Location = Location = __decorate([
     (0, mongoose_1.Schema)({ _id: false })
 ], Location);
@@ -82,6 +87,22 @@ exports.RejeicaoInfoSchema = mongoose_1.SchemaFactory.createForClass(RejeicaoInf
 let Delivery = class Delivery extends mongoose_2.Document {
 };
 exports.Delivery = Delivery;
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], Delivery.prototype, "clienteNome", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], Delivery.prototype, "clienteTelefone", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true, enum: Object.values(pagamento_enum_1.EModoPagamento) }),
+    __metadata("design:type", String)
+], Delivery.prototype, "modalidadePagamento", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: String, required: false, default: '' }),
+    __metadata("design:type", String)
+], Delivery.prototype, "observacoes", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: true, type: exports.LocationSchema }),
     __metadata("design:type", Location)
@@ -141,9 +162,21 @@ __decorate([
     __metadata("design:type", Array)
 ], Delivery.prototype, "historicoRejeicoes", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ type: [mongoose_2.Types.ObjectId], ref: 'Entregador', default: [] }),
+    __metadata("design:type", Array)
+], Delivery.prototype, "rejectedBy", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], Delivery.prototype, "rejectionCount", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], Delivery.prototype, "recolherSucata", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Delivery.prototype, "tipoEntrega", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)

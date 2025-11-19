@@ -17,6 +17,7 @@ export declare const CoordinatesSchema: import("mongoose").Schema<Coordinates, i
 export declare class Location {
     address: string;
     coordinates: Coordinates;
+    name?: string;
 }
 export declare const LocationSchema: import("mongoose").Schema<Location, import("mongoose").Model<Location, any, any, any, MongooseDocument<unknown, any, Location, any> & Location & {
     _id: Types.ObjectId;
@@ -43,6 +44,10 @@ export declare const RejeicaoInfoSchema: import("mongoose").Schema<RejeicaoInfo,
     __v: number;
 }>;
 export declare class Delivery extends MongooseDocument {
+    clienteNome: string;
+    clienteTelefone: string;
+    modalidadePagamento: string;
+    observacoes: string;
     origin: Location;
     destination: Location;
     itemDescription: string;
@@ -55,7 +60,10 @@ export declare class Delivery extends MongooseDocument {
     codigoEntrega: string;
     checkInLiberadoManualmente: boolean;
     historicoRejeicoes: RejeicaoInfo[];
+    rejectedBy: Types.ObjectId[];
+    rejectionCount: number;
     recolherSucata: boolean;
+    tipoEntrega?: string;
     createdAt?: Date;
     updateAt?: Date;
 }

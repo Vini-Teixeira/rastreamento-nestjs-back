@@ -16,6 +16,7 @@ const google_maps_module_1 = require("../google-maps/google-maps.module");
 const entregas_module_1 = require("../entregas/entregas.module");
 const entregadores_module_1 = require("../entregadores/entregadores.module");
 const entregador_schema_1 = require("../entregadores/schemas/entregador.schema");
+const lojistas_module_1 = require("../lojistas/lojistas.module");
 const fcm_module_1 = require("../fcm/fcm.module");
 let SocorroModule = class SocorroModule {
 };
@@ -30,6 +31,7 @@ exports.SocorroModule = SocorroModule = __decorate([
             fcm_module_1.FcmModule,
             (0, common_1.forwardRef)(() => entregas_module_1.EntregasModule),
             (0, common_1.forwardRef)(() => entregadores_module_1.EntregadoresModule),
+            (0, common_1.forwardRef)(() => lojistas_module_1.LojistasModule)
         ],
         controllers: [socorros_controller_1.SocorrosController],
         providers: [socorros_service_1.SocorrosService],

@@ -9,20 +9,15 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InstalandoDto = void 0;
+exports.CheckInDto = void 0;
 const class_validator_1 = require("class-validator");
-class InstalandoDto {
+class CheckInDto {
 }
-exports.InstalandoDto = InstalandoDto;
+exports.CheckInDto = CheckInDto;
 __decorate([
-    (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
-], InstalandoDto.prototype, "codigoEntrega", void 0);
-__decorate([
-    (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.ArrayMinSize)(4),
-    (0, class_validator_1.IsString)({ each: true }),
-    __metadata("design:type", Array)
-], InstalandoDto.prototype, "fotos", void 0);
-//# sourceMappingURL=instalando.dto.js.map
+], CheckInDto.prototype, "codigoEntrega", void 0);
+//# sourceMappingURL=check-in.dto.js.map

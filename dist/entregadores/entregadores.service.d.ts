@@ -20,6 +20,7 @@ export declare class EntregadoresService {
     markAsActive(driverId: string): Promise<void>;
     registerLogout(driverId: string): Promise<void>;
     validatePassword(telefone: string, pass: string): Promise<EntregadorDocument | any>;
+    findAvailable(): Promise<Entregador[]>;
     create(createEntregadorDto: CreateEntregadorDto): Promise<Entregador>;
     update(id: string, updateEntregadorDto: UpdateEntregadorDto): Promise<EntregadorDocument | null>;
     findOneByPhoneWithPassword(telefone: string): Promise<EntregadorDocument | null>;

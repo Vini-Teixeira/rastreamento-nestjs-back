@@ -6,8 +6,11 @@ import {
   IsMongoId,
   ValidateNested,
   IsOptional,
-  IsBoolean
+  IsBoolean,
+  IsEnum,
+  IsPhoneNumber
 } from 'class-validator';
+import { EModoPagamento } from '../enums/pagamento.enum';
 
 class CoordinatesDto {
   @IsNumber()
@@ -36,10 +39,10 @@ class DestinationLocationDto {
   @IsNotEmpty()
   address: string;
 
-  @IsOptional()
   @ValidateNested()
   @Type(() => CoordinatesDto)
-  coordinates?: CoordinatesDto;
+  @IsNotEmpty()
+  coordinates: CoordinatesDto;
 }
 
 export class CreateDeliveryDto {
@@ -48,6 +51,22 @@ export class CreateDeliveryDto {
   @IsNotEmpty()
   @IsOptional()
   origin?: OriginLocationDto;
+
+  @IsString()
+  @IsNotEmpty()
+  clienteNome: string;
+
+  @IsPhoneNumber('BR')
+  @IsNotEmpty()
+  clienteTelefone: string
+
+  @IsEnum(EModoPagamento)
+  @IsNotEmpty()
+  modalidadePagamento: EModoPagamento;
+
+  @IsString()
+  @IsOptional()
+  observacoes?: string;
 
   @IsOptional()
   @IsMongoId({ message: 'O ID do entregador deve ser um MongoID válido.' })

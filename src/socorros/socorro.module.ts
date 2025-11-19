@@ -7,6 +7,7 @@ import { GoogleMapsModule } from 'src/google-maps/google-maps.module';
 import { EntregasModule } from 'src/entregas/entregas.module';
 import { EntregadoresModule } from 'src/entregadores/entregadores.module';
 import { EntregadorSchema, Entregador } from 'src/entregadores/schemas/entregador.schema';
+import { LojistasModule } from 'src/lojistas/lojistas.module';
 import { FcmModule } from 'src/fcm/fcm.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { FcmModule } from 'src/fcm/fcm.module';
     FcmModule,
     forwardRef(() => EntregasModule),
     forwardRef(() => EntregadoresModule),
+    forwardRef(() => LojistasModule)
   ],
   controllers: [SocorrosController],
   providers: [SocorrosService],

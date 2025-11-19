@@ -1,9 +1,10 @@
-import { IsArray, IsNotEmpty, IsString, ArrayMinSize } from 'class-validator';
+import { IsArray, IsNotEmpty, IsOptional, IsString, ArrayMinSize } from 'class-validator';
 
 export class InstalandoDto {
     @IsString()
-    @IsNotEmpty()
-    codigoEntrega: string
+    @IsOptional()
+    //@IsNotEmpty()
+    codigoEntrega?: string
 
     @IsArray()
     @ArrayMinSize(4)

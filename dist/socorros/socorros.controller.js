@@ -19,20 +19,31 @@ const create_socorro_dto_1 = require("./dto/create-socorro.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const cheguei_ao_local_dto_1 = require("./dto/cheguei-ao-local.dto");
 const finalizar_socorro_dto_1 = require("./dto/finalizar-socorro.dto");
+const rejeicao_dto_1 = require("../entregas/dto/rejeicao.dto");
 let SocorrosController = class SocorrosController {
     constructor(socorrosService) {
         this.socorrosService = socorrosService;
-    }
-    async create(createSocorroDto, request) {
-        const solicitanteId = request.user.sub;
-        return this.socorrosService.create(createSocorroDto, solicitanteId);
     }
     async findMySocorros(request) {
         const driverId = request.user.sub;
         return this.socorrosService.findAllByDriverId(driverId);
     }
+    async create(createSocorroDto, request) {
+        const solicitanteId = request.user.sub;
+        return this.socorrosService.create(createSocorroDto, solicitanteId);
+    }
     async findOne(id) {
         return this.socorrosService.findOne(id);
+    }
+    async findAllByLojista(request, page = '1', limit = '10', status) {
+        const lojistaId = request.user.sub;
+        const pageNum = parseInt(page, 10) || 1;
+        const limitNum = parseInt(limit, 10) || 10;
+        return this.socorrosService.findAllBySolicitanteId(lojistaId, pageNum, limitNum, status);
+    }
+    async recusarSocorro(socorroId, request, rejeicaoDto) {
+        const driverId = request.user.sub;
+        return this.socorrosService.recusarSocorro(socorroId, driverId, rejeicaoDto);
     }
     async accept(socorroId, request) {
         const driverId = request.user.sub;
@@ -57,6 +68,13 @@ let SocorrosController = class SocorrosController {
 };
 exports.SocorrosController = SocorrosController;
 __decorate([
+    (0, common_1.Get)('meus-socorros'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], SocorrosController.prototype, "findMySocorros", null);
+__decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
@@ -65,19 +83,32 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], SocorrosController.prototype, "create", null);
 __decorate([
-    (0, common_1.Get)('meus-socorros'),
-    __param(0, (0, common_1.Req)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], SocorrosController.prototype, "findMySocorros", null);
-__decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], SocorrosController.prototype, "findOne", null);
+__decorate([
+    (0, common_1.Get)(),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('page')),
+    __param(2, (0, common_1.Query)('limit')),
+    __param(3, (0, common_1.Query)('status')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String, String]),
+    __metadata("design:returntype", Promise)
+], SocorrosController.prototype, "findAllByLojista", null);
+__decorate([
+    (0, common_1.Post)(':id/recusar'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Req)()),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, rejeicao_dto_1.RejeicaoDto]),
+    __metadata("design:returntype", Promise)
+], SocorrosController.prototype, "recusarSocorro", null);
 __decorate([
     (0, common_1.Patch)(':id/aceitar'),
     __param(0, (0, common_1.Param)('id')),

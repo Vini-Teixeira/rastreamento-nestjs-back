@@ -35,7 +35,9 @@ let EntregadoresGateway = EntregadoresGateway_1 = class EntregadoresGateway {
         }
         if (handshake.headers && handshake.headers.authorization) {
             const authHeader = String(handshake.headers.authorization);
-            return authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+            return authHeader.startsWith('Bearer ')
+                ? authHeader.slice(7)
+                : authHeader;
         }
         return undefined;
     }
@@ -78,7 +80,9 @@ let EntregadoresGateway = EntregadoresGateway_1 = class EntregadoresGateway {
         }
     }
     handleDisconnect(client) {
-        const u = client.data?.user?.sub ? `user=${client.data.user.sub}` : 'Entregador: não autenticado';
+        const u = client.data?.user?.sub
+            ? `user=${client.data.user.sub}`
+            : 'Entregador: não autenticado';
         this.logger.log(`Cliente Desconectado: ${client.id} (${u})`);
     }
     onJoinDeliveryRoom(client, data) {
@@ -116,7 +120,7 @@ let EntregadoresGateway = EntregadoresGateway_1 = class EntregadoresGateway {
         try {
             const deliveryId = String(delivery._id ?? delivery.id);
             const driverId = String(delivery.driverId?._id ?? delivery.driverId ?? '');
-            const storeId = String(delivery.loja?._id ?? delivery.loja ?? '');
+            const solicitanteId = String(delivery.solicitanteId?._id ?? delivery.solicitanteId ?? '');
             const payload = {
                 deliveryId: deliveryId,
                 status: delivery.status,
@@ -127,10 +131,133 @@ let EntregadoresGateway = EntregadoresGateway_1 = class EntregadoresGateway {
             if (driverId) {
                 this.server.to(driverId).emit('delivery_updated', payload);
             }
+            if (solicitanteId) {
+                this.server.to(solicitanteId).emit('delivery_updated', payload);
+            }
             this.logger.log(`Emitindo 'delivery_updated' para a sala da entrega ${deliveryId} com status ${delivery.status}`);
         }
         catch (err) {
             this.logger.error(`Erro ao emitir 'delivery_updated' para a entrega ${String(delivery._id ?? delivery.id)}`, err);
+        }
+    }
+    notifySocorroStatusChanged(socorro) {
+        try {
+            const socorroId = String(socorro._id ?? socorro.id);
+            const driverId = String(socorro.driverId?._id ?? socorro.driverId ?? '');
+            const payload = {
+                socorroId: socorroId,
+                status: socorro.status,
+                driverId: driverId,
+                payload: socorro,
+            };
+            this.server.to(socorroId).emit('socorro_updated', payload);
+            if (driverId) {
+                this.server.to(driverId).emit('socorro_updated', payload);
+            }
+            this.logger.log(`Emitindo 'socorro_updated' para a sala do socorro ${socorroId} com status ${socorro.status}`);
+        }
+        catch (err) {
+            this.logger.error(`Erro ao emitir 'socorro_updated' para o socorro ${String(socorro._id ?? socorro.id)}`, err);
+        }
+    }
+    notifyStoreSelfDelivery(delivery) {
+        const solicitanteId = this._getSafeId(delivery.solicitanteId);
+        if (!solicitanteId) {
+            this.logger.error(`[notifyStoreSelfDelivery] Falha: solicitanteId não encontrado.`);
+            return;
+        }
+        try {
+            this.server.to(solicitanteId).emit('nova_notificacao_loja', {
+                tipo: 'SUCCESS',
+                titulo: `Entrega Criada (#${delivery.codigoEntrega})`,
+                mensagem: `Sua entrega para ${delivery.destination.address} foi criada.`,
+                delivery: delivery,
+            });
+            this.logger.log(`Notificação de Entrega Própria enviada para ${solicitanteId}`);
+        }
+        catch (err) {
+            this.logger.error(`Erro ao notificar loja (própria): ${err}`);
+        }
+    }
+    notifyStorePartnerDelivery(delivery) {
+        const solicitanteId = this._getSafeId(delivery.solicitanteId);
+        const origemId = this._getSafeId(delivery.origemId);
+        if (!origemId || !solicitanteId || solicitanteId === origemId)
+            return;
+        try {
+            this.server.to(origemId).emit('nova_notificacao_loja', {
+                tipo: 'INFO',
+                titulo: 'Coleta de Parceira',
+                mensagem: `Uma entrega (#${delivery.codigoEntrega}) solicitada por ${delivery.solicitanteId?.nomeFantasia} requer coleta. Item: ${delivery.itemDescription}`,
+                delivery: delivery,
+            });
+            this.server.to(solicitanteId).emit('nova_notificacao_loja', {
+                tipo: 'SUCCESS',
+                titulo: 'Entrega Parceira Criada',
+                mensagem: `Sua entrega (#${delivery.codigoEntrega}) aguarda coleta em ${delivery.origin.name}.`,
+                delivery: delivery,
+            });
+            this.logger.log(`Notificação de Parceira enviada para ${solicitanteId} e ${origemId}`);
+        }
+        catch (err) {
+            this.logger.error(`Erro ao notificar lojas (parceira): ${err}`);
+        }
+    }
+    notifyStoreDeliveryWarning(delivery) {
+        try {
+            const solicitanteId = this._getSafeId(delivery.solicitanteId);
+            const origemId = this._getSafeId(delivery.origemId);
+            const payload = {
+                tipo: 'WARNING',
+                titulo: `Entrega em Risco (#${delivery.codigoEntrega})`,
+                mensagem: `A entrega para ${delivery.destination.address} foi recusada ${delivery.rejectionCount} vezes. Verifique o status.`,
+                delivery: delivery,
+            };
+            if (solicitanteId)
+                this.server.to(solicitanteId).emit('nova_notificacao_loja', payload);
+            if (origemId && origemId !== solicitanteId)
+                this.server.to(origemId).emit('nova_notificacao_loja', payload);
+            this.logger.warn(`Notificação de AVISO (3+ recusas) enviada para a entrega ${delivery.codigoEntrega}`);
+        }
+        catch (err) {
+            this.logger.error(`Erro ao notificar lojas (aviso): ${err}`);
+        }
+    }
+    notifyStoreDeliveryUnassigned(delivery) {
+        try {
+            const solicitanteId = this._getSafeId(delivery.solicitanteId);
+            if (!solicitanteId) {
+                this.logger.error(`[notifyStoreDeliveryUnassigned] Falha: solicitanteId não encontrado.`);
+                return;
+            }
+            const payload = {
+                tipo: 'ERROR',
+                titulo: `Ação Necessária (#${delivery.codigoEntrega})`,
+                mensagem: `Nenhum motorista foi encontrado para esta entrega. Atribua um motorista manualmente.`,
+                delivery: delivery,
+            };
+            this.server.to(solicitanteId).emit('nova_notificacao_loja', payload);
+            this.logger.error(`Notificação de NÃO ATRIBUÍDA enviada para ${solicitanteId} (Entrega ${delivery.codigoEntrega})`);
+        }
+        catch (err) {
+            this.logger.error(`Erro ao notificar lojas (não atribuída): ${err}`);
+        }
+    }
+    notifyStoreSocorroCreated(socorro) {
+        const solicitanteId = socorro.solicitanteId?.toString();
+        if (!solicitanteId)
+            return;
+        try {
+            this.server.to(solicitanteId).emit('nova_notificacao_loja', {
+                tipo: 'SUCCESS',
+                titulo: `Entrega criada (#${socorro.codigoEntrega})`,
+                mensagem: `Sua entrega para ${socorro.destination.address} foi criada!`,
+                socorro: socorro
+            });
+            this.logger.log(`Notificação de Socorro enviada para ${solicitanteId}`);
+        }
+        catch (err) {
+            this.logger.error(`Erro ao notificar loja (própria): ${err}`);
         }
     }
     emitDriverLocation(deliveryId, payload) {
@@ -152,6 +279,15 @@ let EntregadoresGateway = EntregadoresGateway_1 = class EntregadoresGateway {
         }
         this.logger.log(`Gateway: Recebida atualização da localização para a entrega ${data.deliveryId}`);
         await this.entregasService.updateDriverLocation(data.deliveryId, data.lat, data.lng);
+    }
+    _getSafeId(data) {
+        if (!data)
+            return null;
+        if (typeof data === 'string')
+            return data;
+        if (data._id)
+            return data._id.toString();
+        return null;
     }
 };
 exports.EntregadoresGateway = EntregadoresGateway;

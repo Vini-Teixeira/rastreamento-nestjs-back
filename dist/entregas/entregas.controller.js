@@ -17,11 +17,20 @@ const common_1 = require("@nestjs/common");
 const entregas_service_1 = require("./entregas.service");
 const create_delivery_dto_1 = require("./dto/create-delivery.dto");
 const update_delivery_dto_1 = require("./dto/update-delivery.dto");
+const check_in_dto_1 = require("./dto/check-in.dto");
 const delivery_status_enum_1 = require("./enums/delivery-status.enum");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const flexible_auth_guard_1 = require("../auth/flexible-auth.guard");
 const rejeicao_dto_1 = require("./dto/rejeicao.dto");
 const instalando_dto_1 = require("./dto/instalando.dto");
+const class_validator_1 = require("class-validator");
+class AssignManualDto {
+}
+__decorate([
+    (0, class_validator_1.IsMongoId)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], AssignManualDto.prototype, "driverId", void 0);
 const logger = new common_1.Logger('EntregasController');
 class SyncLocationDto {
 }
@@ -96,6 +105,10 @@ let EntregasController = class EntregasController {
         const driverId = request.user.sub;
         return this.entregasService.recusarEntrega(deliveryId, driverId, rejeicaoDto);
     }
+    async assignManual(deliveryId, assignManualDto, request) {
+        const lojistaId = request.user.sub;
+        return this.entregasService.assignManual(deliveryId, assignManualDto.driverId, lojistaId);
+    }
     async acceptDelivery(id, request) {
         const driver = request.user;
         if (!driver || !driver.sub) {
@@ -111,9 +124,13 @@ let EntregasController = class EntregasController {
         const lojistaId = request.user.sub;
         return this.entregasService.liberarCheckInManual(deliveryId, lojistaId);
     }
+    async validarCheckIn(deliveryId, request, checkInDto) {
+        const driverId = request.user.sub;
+        return this.entregasService.validarCheckIn(deliveryId, driverId, checkInDto);
+    }
     async realizarInstalacao(deliveryId, request, instalandoDto) {
         const driverId = request.user.sub;
-        return this.entregasService.realizarCheckIn(deliveryId, driverId, instalandoDto);
+        return this.entregasService.finalizarInstalacao(deliveryId, driverId, instalandoDto);
     }
     async finishDelivery(id, request) {
         const driver = request.user;
@@ -219,6 +236,16 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], EntregasController.prototype, "recusarEntrega", null);
 __decorate([
+    (0, common_1.Post)(':id/assign-manual'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, AssignManualDto, Object]),
+    __metadata("design:returntype", Promise)
+], EntregasController.prototype, "assignManual", null);
+__decorate([
     (0, common_1.Patch)(':id/aceitar'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Req)()),
@@ -244,7 +271,17 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], EntregasController.prototype, "liberarCheckIn", null);
 __decorate([
-    (0, common_1.Post)(':id/instalando'),
+    (0, common_1.Post)(':id/check-in'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Req)()),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, check_in_dto_1.CheckInDto]),
+    __metadata("design:returntype", Promise)
+], EntregasController.prototype, "validarCheckIn", null);
+__decorate([
+    (0, common_1.Post)(':id/finalizar-instalacao'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Req)()),

@@ -43,6 +43,12 @@ export class EntregadoresController {
    * LOGIN - Apenas para entregadores
    * Retorna JWT para uso nas rotas protegidas com JwtAuthGuard
    */
+  @Get('available')
+  @UseGuards(JwtAuthGuard)
+  async getAvailableDrivers() {
+    return this.entregadoresService.findAvailable()
+  }
+
   @Patch('me/heartbeat')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)

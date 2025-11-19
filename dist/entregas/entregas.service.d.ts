@@ -4,6 +4,7 @@ import { DeliveryStatus } from './enums/delivery-status.enum';
 import { EntregadorDocument } from '../entregadores/schemas/entregador.schema';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { UpdateDeliveryDto } from './dto/update-delivery.dto';
+import { CheckInDto } from './dto/check-in.dto';
 import { GoogleMapsService } from '../google-maps/google-maps.service';
 import { EntregadoresGateway } from 'src/entregadores/entregadores.gateway';
 import { SchedulerRegistry } from '@nestjs/schedule';
@@ -35,11 +36,13 @@ export declare class EntregasService {
     recusarEntrega(deliveryId: string, driverId: string, rejeicaoDto: RejeicaoDto): Promise<{
         message: string;
     }>;
+    assignManual(deliveryId: string, driverId: string, lojistaId: string): Promise<Delivery>;
     handleDeliveryTimeout(deliveryId: string, driverId: string): Promise<void>;
     acceptDelivery(id: string, driverId: string): Promise<Delivery>;
     collectItem(id: string, driverId: string): Promise<Delivery>;
     liberarCheckInManual(deliveryId: string, solicitanteId: string): Promise<Delivery>;
-    realizarCheckIn(deliveryId: string, driverId: string, instalandoDto: InstalandoDto): Promise<Delivery>;
+    validarCheckIn(deliveryId: string, driverId: string, checkInDto: CheckInDto): Promise<Delivery>;
+    finalizarInstalacao(deliveryId: string, driverId: string, instalandoDto: InstalandoDto): Promise<Delivery>;
     finishDelivery(id: string, driverId: string): Promise<Delivery>;
     cancelarEntrega(deliveryId: string, solicitanteId: string): Promise<Delivery>;
     handleStaleDeliveries(): Promise<void>;

@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateDeliveryDto = void 0;
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
+const pagamento_enum_1 = require("../enums/pagamento.enum");
 class CoordinatesDto {
 }
 __decorate([
@@ -45,9 +46,9 @@ __decorate([
     __metadata("design:type", String)
 ], DestinationLocationDto.prototype, "address", void 0);
 __decorate([
-    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),
     (0, class_transformer_1.Type)(() => CoordinatesDto),
+    (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", CoordinatesDto)
 ], DestinationLocationDto.prototype, "coordinates", void 0);
 class CreateDeliveryDto {
@@ -60,6 +61,26 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", OriginLocationDto)
 ], CreateDeliveryDto.prototype, "origin", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateDeliveryDto.prototype, "clienteNome", void 0);
+__decorate([
+    (0, class_validator_1.IsPhoneNumber)('BR'),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateDeliveryDto.prototype, "clienteTelefone", void 0);
+__decorate([
+    (0, class_validator_1.IsEnum)(pagamento_enum_1.EModoPagamento),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateDeliveryDto.prototype, "modalidadePagamento", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreateDeliveryDto.prototype, "observacoes", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsMongoId)({ message: 'O ID do entregador deve ser um MongoID válido.' }),

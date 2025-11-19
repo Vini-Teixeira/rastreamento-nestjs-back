@@ -17,7 +17,7 @@ var SocorroStatus;
 (function (SocorroStatus) {
     SocorroStatus["PENDING"] = "pendente";
     SocorroStatus["ACCEPTED"] = "aceito";
-    SocorroStatus["ON_THE_WAY"] = "\u00E0_caminho";
+    SocorroStatus["ON_THE_WAY"] = "a_caminho";
     SocorroStatus["ON_SITE"] = "no_local";
     SocorroStatus["COMPLETED"] = "conclu\u00EDdo";
     SocorroStatus["CANCELLED"] = "cancelado";
@@ -51,6 +51,20 @@ __decorate([
     __metadata("design:type", String)
 ], Socorro.prototype, "status", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({
+        type: [
+            {
+                motivo: { type: String, required: true },
+                texto: { type: String },
+                driverId: { type: mongoose_2.Types.ObjectId, ref: 'Entregador' },
+                timestamp: { type: Date, default: Date.now },
+            },
+        ],
+        default: [],
+    }),
+    __metadata("design:type", Array)
+], Socorro.prototype, "historicoRejeicoes", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ required: true, type: delivery_schema_1.LocationSchema }),
     __metadata("design:type", delivery_schema_1.Location)
 ], Socorro.prototype, "clientLocation", void 0);
@@ -62,6 +76,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, trim: true }),
     __metadata("design:type", String)
 ], Socorro.prototype, "clienteNome", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true, trim: true }),
+    __metadata("design:type", String)
+], Socorro.prototype, "solicitanteNome", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: true, trim: true }),
     __metadata("design:type", String)

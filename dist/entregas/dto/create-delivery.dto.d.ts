@@ -1,3 +1,4 @@
+import { EModoPagamento } from '../enums/pagamento.enum';
 declare class CoordinatesDto {
     lat: number;
     lng: number;
@@ -8,10 +9,14 @@ declare class OriginLocationDto {
 }
 declare class DestinationLocationDto {
     address: string;
-    coordinates?: CoordinatesDto;
+    coordinates: CoordinatesDto;
 }
 export declare class CreateDeliveryDto {
     origin?: OriginLocationDto;
+    clienteNome: string;
+    clienteTelefone: string;
+    modalidadePagamento: EModoPagamento;
+    observacoes?: string;
     driverId?: string;
     destination: DestinationLocationDto;
     itemDescription: string;

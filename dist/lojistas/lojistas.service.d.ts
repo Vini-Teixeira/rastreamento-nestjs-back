@@ -16,6 +16,7 @@ export declare class LojistasService {
         emAndamento: any;
         canceladas: any;
     }>;
+    findById(id: string): Promise<Lojista | null>;
     create(createLojistaDto: CreateLojistaDto): Promise<Lojista>;
     update(id: string, updateLojistaDto: UpdateLojistaDto): Promise<Lojista | null>;
     delete(id: string): Promise<Lojista | null>;

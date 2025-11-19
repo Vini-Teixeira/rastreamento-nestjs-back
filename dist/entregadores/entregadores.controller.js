@@ -29,6 +29,9 @@ let EntregadoresController = class EntregadoresController {
         this.entregadoresService = entregadoresService;
         this.authService = authService;
     }
+    async getAvailableDrivers() {
+        return this.entregadoresService.findAvailable();
+    }
     async heartbeat(request) {
         const driverId = request.user.sub;
         await this.entregadoresService.updateHeartbeat(driverId);
@@ -100,6 +103,13 @@ let EntregadoresController = class EntregadoresController {
     }
 };
 exports.EntregadoresController = EntregadoresController;
+__decorate([
+    (0, common_1.Get)('available'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], EntregadoresController.prototype, "getAvailableDrivers", null);
 __decorate([
     (0, common_1.Patch)('me/heartbeat'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

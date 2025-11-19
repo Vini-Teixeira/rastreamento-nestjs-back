@@ -1,4 +1,4 @@
 export declare class InstalandoDto {
-    codigoEntrega: string;
+    codigoEntrega?: string;
     fotos: string[];
 }

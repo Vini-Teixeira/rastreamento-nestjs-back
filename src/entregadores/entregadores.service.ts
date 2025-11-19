@@ -104,6 +104,13 @@ export class EntregadoresService {
     return null;
   }
 
+  async findAvailable(): Promise<Entregador[]> {
+    return this.entregadorModel.find({
+      ativo: true,
+      emEntrega: false
+    }).select('-senha -localizacaoHistory').exec()
+  }
+
   async create(createEntregadorDto: CreateEntregadorDto): Promise<Entregador> {
     const newEntregador = new this.entregadorModel({
       ...createEntregadorDto,

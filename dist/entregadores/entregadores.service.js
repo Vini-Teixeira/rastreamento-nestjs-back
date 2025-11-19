@@ -80,6 +80,12 @@ let EntregadoresService = EntregadoresService_1 = class EntregadoresService {
         }
         return null;
     }
+    async findAvailable() {
+        return this.entregadorModel.find({
+            ativo: true,
+            emEntrega: false
+        }).select('-senha -localizacaoHistory').exec();
+    }
     async create(createEntregadorDto) {
         const newEntregador = new this.entregadorModel({
             ...createEntregadorDto,

@@ -22,6 +22,7 @@ import { Request } from 'express';
 import { EntregasService } from './entregas.service';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { UpdateDeliveryDto } from './dto/update-delivery.dto';
+import { CheckInDto } from './dto/check-in.dto';
 import {
   Delivery,
   Coordinates,
@@ -31,6 +32,13 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { FlexibleAuthGuard } from 'src/auth/flexible-auth.guard';
 import { RejeicaoDto } from './dto/rejeicao.dto';
 import { InstalandoDto } from './dto/instalando.dto';
+import { IsMongoId, IsNotEmpty } from 'class-validator';
+
+class AssignManualDto {
+  @IsMongoId()
+  @IsNotEmpty()
+  driverId: string;
+}
 
 const logger = new Logger('EntregasController');
 
@@ -182,6 +190,22 @@ export class EntregasController {
     );
   }
 
+  @Post(':id/assign-manual')
+  @UseGuards(JwtAuthGuard)
+  async assignManual(
+    @Param('id') deliveryId: string,
+    @Body() assignManualDto: AssignManualDto,
+    @Req() request: { user: AuthenticatedUser },
+  ) {
+    const lojistaId = request.user.sub;
+    
+    return this.entregasService.assignManual(
+      deliveryId,
+      assignManualDto.driverId,
+      lojistaId,
+    );
+  }
+
   @Patch(':id/aceitar')
   async acceptDelivery(@Param('id') id: string, @Req() request: Request) {
     const driver = request.user as any;
@@ -209,7 +233,22 @@ export class EntregasController {
     return this.entregasService.liberarCheckInManual(deliveryId, lojistaId);
   }
 
-  @Post(':id/instalando')
+  @Post(':id/check-in')
+  @UseGuards(JwtAuthGuard)
+  async validarCheckIn(
+    @Param('id') deliveryId: string,
+    @Req() request: { user: AuthenticatedUser },
+    @Body() checkInDto: CheckInDto,
+  ) {
+    const driverId = request.user.sub;
+    return this.entregasService.validarCheckIn(
+      deliveryId,
+      driverId,
+      checkInDto,
+    );
+  }
+
+  @Post(':id/finalizar-instalacao')
   @UseGuards(JwtAuthGuard)
   async realizarInstalacao(
     @Param('id') deliveryId: string,
@@ -217,7 +256,7 @@ export class EntregasController {
     @Body() instalandoDto: InstalandoDto,
   ) {
     const driverId = request.user.sub
-    return this.entregasService.realizarCheckIn(deliveryId, driverId, instalandoDto)
+    return this.entregasService.finalizarInstalacao(deliveryId, driverId, instalandoDto)
   }
 
   @Patch(':id/finalizar')

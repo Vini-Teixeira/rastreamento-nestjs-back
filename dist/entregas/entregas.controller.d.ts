@@ -2,9 +2,13 @@ import { Request } from 'express';
 import { EntregasService } from './entregas.service';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { UpdateDeliveryDto } from './dto/update-delivery.dto';
+import { CheckInDto } from './dto/check-in.dto';
 import { Delivery } from './schemas/delivery.schema';
 import { RejeicaoDto } from './dto/rejeicao.dto';
 import { InstalandoDto } from './dto/instalando.dto';
+declare class AssignManualDto {
+    driverId: string;
+}
 declare class SyncLocationDto {
     locations: {
         deliveryId: string;
@@ -43,11 +47,17 @@ export declare class EntregasController {
     }, rejeicaoDto: RejeicaoDto): Promise<{
         message: string;
     }>;
+    assignManual(deliveryId: string, assignManualDto: AssignManualDto, request: {
+        user: AuthenticatedUser;
+    }): Promise<Delivery>;
     acceptDelivery(id: string, request: Request): Promise<Delivery>;
     collectItem(id: string, request: Request): Promise<Delivery>;
     liberarCheckIn(deliveryId: string, request: {
         user: AuthenticatedUser;
     }): Promise<Delivery>;
+    validarCheckIn(deliveryId: string, request: {
+        user: AuthenticatedUser;
+    }, checkInDto: CheckInDto): Promise<Delivery>;
     realizarInstalacao(deliveryId: string, request: {
         user: AuthenticatedUser;
     }, instalandoDto: InstalandoDto): Promise<Delivery>;
